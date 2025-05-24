@@ -132,7 +132,11 @@ unique = true
 email = "admin@example.com"
 ```
 
-See the `schemas/` directory for complete examples.
+See the `schemas/` directory for complete examples:
+- `default.schema` - Minimal default schema
+- `example.schema` - E-commerce database with users, products, and orders
+- `blog.schema` - Blog system with authors and posts
+- `PostIt.schema` - Post-it notes system with tags and priorities
 
 ## Environment Variables
 

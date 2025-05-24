@@ -1,0 +1,221 @@
+# PostIt Notes Database Schema
+# A simple system for managing post-it notes with tags, priorities, and statuses
+
+[database]
+name = "postit"
+description = "Post-it notes management system"
+version = "1.0.0"
+
+# Main notes table
+[[tables]]
+name = "notes"
+description = "Post-it notes"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "title"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "description"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+[[tables.columns]]
+name = "status"
+type = "TEXT"
+nullable = false
+default = "'open'"
+# Valid values: open, closed, working, archived
+
+[[tables.columns]]
+name = "priority"
+type = "TEXT"
+nullable = false
+default = "'medium'"
+# Valid values: low, medium, high, critical
+
+[[tables.columns]]
+name = "url"
+type = "TEXT"
+nullable = true
+
+# Tags table
+[[tables]]
+name = "tags"
+description = "Available tags"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "name"
+type = "TEXT"
+nullable = false
+unique = true
+
+[[tables.columns]]
+name = "color"
+type = "TEXT"
+nullable = true
+# Hex color code for UI display
+
+# Junction table for many-to-many relationship
+[[tables]]
+name = "note_tags"
+description = "Links notes to tags"
+
+[[tables.columns]]
+name = "note_id"
+type = "INTEGER"
+nullable = false
+foreign_key = { table = "notes", column = "id" }
+
+[[tables.columns]]
+name = "tag_id"
+type = "INTEGER"
+nullable = false
+foreign_key = { table = "tags", column = "id" }
+
+# Composite primary key would be (note_id, tag_id)
+# For now, we'll ensure uniqueness through careful insertion
+
+# Initial tags
+[[data.tags]]
+name = "todo"
+color = "#FF6B6B"
+
+[[data.tags]]
+name = "idea"
+color = "#4ECDC4"
+
+[[data.tags]]
+name = "bug"
+color = "#FF4757"
+
+[[data.tags]]
+name = "feature"
+color = "#45B7D1"
+
+[[data.tags]]
+name = "documentation"
+color = "#96CEB4"
+
+[[data.tags]]
+name = "research"
+color = "#DDA0DD"
+
+[[data.tags]]
+name = "meeting"
+color = "#FFB6C1"
+
+[[data.tags]]
+name = "reminder"
+color = "#FFA07A"
+
+# Sample notes
+[[data.notes]]
+title = "Welcome to PostIt!"
+description = "This is your post-it notes system. Create notes, set priorities, and organize with tags."
+status = "open"
+priority = "low"
+
+[[data.notes]]
+title = "Setup database backups"
+description = "Configure automatic daily backups for the PostIt database"
+status = "open"
+priority = "high"
+url = "https://docs.example.com/backup-guide"
+
+[[data.notes]]
+title = "Team meeting notes"
+description = "Discuss Q1 roadmap and resource allocation"
+status = "working"
+priority = "medium"
+
+[[data.notes]]
+title = "Fix login timeout issue"
+description = "Users are being logged out after 5 minutes of inactivity"
+status = "open"
+priority = "critical"
+url = "https://github.com/example/app/issues/123"
+
+[[data.notes]]
+title = "Old project cleanup"
+description = "Remove deprecated API endpoints from v1"
+status = "archived"
+priority = "low"
+
+# Sample note-tag relationships
+[[data.note_tags]]
+note_id = 1
+tag_id = 8  # reminder
+
+[[data.note_tags]]
+note_id = 2
+tag_id = 1  # todo
+
+[[data.note_tags]]
+note_id = 2
+tag_id = 4  # feature
+
+[[data.note_tags]]
+note_id = 3
+tag_id = 7  # meeting
+
+[[data.note_tags]]
+note_id = 3
+tag_id = 5  # documentation
+
+[[data.note_tags]]
+note_id = 4
+tag_id = 3  # bug
+
+[[data.note_tags]]
+note_id = 4
+tag_id = 1  # todo
+
+[[data.note_tags]]
+note_id = 5
+tag_id = 1  # todo
+
+# Indexes for better query performance
+[[indexes]]
+table = "notes"
+name = "idx_notes_status"
+columns = ["status"]
+
+[[indexes]]
+table = "notes"
+name = "idx_notes_priority"
+columns = ["priority"]
+
+[[indexes]]
+table = "notes"
+name = "idx_notes_created"
+columns = ["created_at"]
+
+[[indexes]]
+table = "note_tags"
+name = "idx_note_tags_note"
+columns = ["note_id"]
+
+[[indexes]]
+table = "note_tags"
+name = "idx_note_tags_tag"
+columns = ["tag_id"]
