@@ -1,0 +1,311 @@
+syntax = "proto3";
+
+package datasink;
+
+// DataSink is a gRPC service that provides a database-agnostic interface
+// for performing various database operations. It supports table management,
+// CRUD operations, and streaming queries.
+service DataSink {
+    // Table operations
+    
+    // CreateTable creates a new table with the specified schema.
+    // Returns an error if the table already exists.
+    rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+    
+    // DropTable removes an existing table and all its data.
+    // This operation is irreversible. Use with caution.
+    rpc DropTable(DropTableRequest) returns (DropTableResponse);
+    
+    // Data operations
+    
+    // Insert adds a single row to the specified table.
+    // Returns the ID of the inserted row (if applicable).
+    rpc Insert(InsertRequest) returns (InsertResponse);
+    
+    // Update modifies existing rows that match the WHERE clause.
+    // Returns the number of affected rows.
+    rpc Update(UpdateRequest) returns (UpdateResponse);
+    
+    // Delete removes rows that match the WHERE clause.
+    // Returns the number of deleted rows.
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    
+    // Query operations
+    
+    // Query executes a SQL query and returns results as a stream.
+    // This allows efficient handling of large result sets without
+    // loading all data into memory at once.
+    // The first message in the stream contains column metadata.
+    rpc Query(QueryRequest) returns (stream QueryResponse);
+    
+    // Batch operations
+    
+    // BatchInsert efficiently inserts multiple rows in a single transaction.
+    // This is more efficient than multiple individual Insert calls.
+    rpc BatchInsert(BatchInsertRequest) returns (BatchInsertResponse);
+}
+
+// Request to create a new table
+message CreateTableRequest {
+    // Name of the table to create (e.g., "users", "products")
+    string table_name = 1;
+    
+    // List of column definitions for the table schema
+    repeated ColumnDefinition columns = 2;
+}
+
+// Defines a single column in a table
+message ColumnDefinition {
+    // Column name (e.g., "id", "email", "created_at")
+    string name = 1;
+    
+    // Data type of the column
+    DataType type = 2;
+    
+    // Whether NULL values are allowed (default: true)
+    bool nullable = 3;
+    
+    // Whether this column is the primary key
+    bool primary_key = 4;
+    
+    // Whether values in this column must be unique
+    bool unique = 5;
+    
+    // Default value for the column (as a string)
+    // Empty string means no default value
+    string default_value = 6;
+}
+
+// Supported data types for columns
+enum DataType {
+    // 64-bit signed integer
+    INTEGER = 0;
+    
+    // Double-precision floating point
+    REAL = 1;
+    
+    // Variable-length text string
+    TEXT = 2;
+    
+    // Binary data
+    BLOB = 3;
+    
+    // Boolean value (stored as INTEGER 0 or 1)
+    BOOLEAN = 4;
+    
+    // Unix timestamp (stored as INTEGER)
+    TIMESTAMP = 5;
+}
+
+// Response from CreateTable operation
+message CreateTableResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+}
+
+// Request to drop (delete) a table
+message DropTableRequest {
+    // Name of the table to drop
+    string table_name = 1;
+}
+
+// Response from DropTable operation
+message DropTableResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+}
+
+// Request to insert a single row into a table
+message InsertRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // Map of column names to values for the new row
+    // Example: {"id": 1, "name": "Alice", "email": "alice@example.com"}
+    map<string, Value> values = 2;
+}
+
+// Represents a single value that can be stored in a database column
+// Uses protobuf's oneof to ensure type safety
+message Value {
+    oneof value {
+        // 64-bit signed integer value
+        int64 int_value = 1;
+        
+        // Double-precision floating point value
+        double real_value = 2;
+        
+        // Text string value
+        string text_value = 3;
+        
+        // Binary data value
+        bytes blob_value = 4;
+        
+        // Boolean value
+        bool bool_value = 5;
+        
+        // Unix timestamp (seconds since epoch)
+        int64 timestamp_value = 6;
+        
+        // Explicit NULL value (set to true to represent NULL)
+        bool null_value = 7;
+    }
+}
+
+// Response from Insert operation
+message InsertResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // ID of the inserted row (if auto-increment/ROWID is used)
+    // -1 if not applicable
+    int64 inserted_id = 3;
+}
+
+// Request to update existing rows in a table
+message UpdateRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // Map of column names to new values
+    // Only specified columns will be updated
+    map<string, Value> values = 2;
+    
+    // SQL WHERE clause to identify rows to update
+    // Example: "id = 1", "age > 18 AND status = 'active'"
+    // WARNING: Empty where_clause will update ALL rows
+    string where_clause = 3;
+}
+
+// Response from Update operation
+message UpdateResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // Number of rows that were updated
+    int64 affected_rows = 3;
+}
+
+// Request to delete rows from a table
+message DeleteRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // SQL WHERE clause to identify rows to delete
+    // Example: "id = 1", "created_at < '2023-01-01'"
+    // WARNING: Empty where_clause will delete ALL rows
+    string where_clause = 2;
+}
+
+// Response from Delete operation
+message DeleteResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // Number of rows that were deleted
+    int64 affected_rows = 3;
+}
+
+// Request to execute a SQL query
+message QueryRequest {
+    // SQL query to execute
+    // Supports SELECT and other read-only queries
+    // Example: "SELECT * FROM users WHERE age > ?"
+    string sql = 1;
+    
+    // Optional named parameters for parameterized queries
+    // Example: {"min_age": 18, "status": "active"}
+    // Note: Parameter binding syntax depends on the database backend
+    map<string, Value> parameters = 2;
+}
+
+// Response from Query operation
+// Streamed to support large result sets
+message QueryResponse {
+    oneof response {
+        // Contains query results (columns and/or rows)
+        ResultSet result_set = 1;
+        
+        // Contains error information if query failed
+        Error error = 2;
+    }
+}
+
+// Container for query results
+message ResultSet {
+    // Column metadata (sent in first stream message)
+    // Empty in subsequent messages
+    repeated Column columns = 1;
+    
+    // Data rows (can be sent across multiple stream messages)
+    repeated Row rows = 2;
+}
+
+// Metadata for a single result column
+message Column {
+    // Column name or alias
+    string name = 1;
+    
+    // Data type of the column
+    DataType type = 2;
+}
+
+// A single row of query results
+message Row {
+    // Values in column order
+    // Length must match the number of columns
+    repeated Value values = 1;
+}
+
+// Error information for failed operations
+message Error {
+    // Error code (e.g., "QUERY_ERROR", "CONNECTION_ERROR")
+    string code = 1;
+    
+    // Human-readable error message
+    string message = 2;
+}
+
+// Request to insert multiple rows in a single transaction
+message BatchInsertRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // List of rows to insert
+    // All rows must have compatible schemas
+    repeated InsertRow rows = 2;
+}
+
+// A single row for batch insertion
+message InsertRow {
+    // Map of column names to values
+    // Missing columns will use default values or NULL
+    map<string, Value> values = 1;
+}
+
+// Response from BatchInsert operation
+message BatchInsertResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // Number of rows successfully inserted
+    int64 inserted_count = 3;
+}
