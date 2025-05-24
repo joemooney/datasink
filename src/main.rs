@@ -1,6 +1,7 @@
 mod cli;
 mod db;
 mod grpc;
+mod schema;
 mod proto {
     tonic::include_proto!("datasink");
 }
@@ -44,24 +45,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ServerCommands::CreateDatabase { name } => {
                 commands::create_database(name).await?;
             }
+            ServerCommands::CreateFromSchema { schema_file, database_name } => {
+                commands::create_from_schema(schema_file, database_name, cli.server_address).await?;
+            }
         },
-        Commands::Query { sql, format } => {
+        Commands::Query { sql, format, database: _ } => {
+            // TODO: Pass database parameter when multi-database support is implemented
             commands::query(cli.server_address, sql, format).await?;
         }
-        Commands::Insert { table, data } => {
+        Commands::Insert { table, data, database: _ } => {
+            // TODO: Pass database parameter when multi-database support is implemented
             commands::insert(cli.server_address, table, data).await?;
         }
         Commands::Update {
             table,
             data,
             where_clause,
+            database: _,
         } => {
+            // TODO: Pass database parameter when multi-database support is implemented
             commands::update(cli.server_address, table, data, where_clause).await?;
         }
         Commands::Delete {
             table,
             where_clause,
+            database: _,
         } => {
+            // TODO: Pass database parameter when multi-database support is implemented
             commands::delete(cli.server_address, table, where_clause).await?;
         }
     }

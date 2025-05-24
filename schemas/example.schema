@@ -1,0 +1,233 @@
+# DataSink Schema Definition
+# This file defines the database schema including tables and initial data
+
+[database]
+name = "example_db"
+description = "Example database schema for demonstration"
+version = "1.0.0"
+
+# Table definitions
+[[tables]]
+name = "users"
+description = "User accounts table"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+nullable = false
+auto_increment = true
+
+[[tables.columns]]
+name = "username"
+type = "TEXT"
+nullable = false
+unique = true
+
+[[tables.columns]]
+name = "email"
+type = "TEXT"
+nullable = false
+unique = true
+
+[[tables.columns]]
+name = "full_name"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "is_active"
+type = "BOOLEAN"
+nullable = false
+default = "true"
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+[[tables.columns]]
+name = "updated_at"
+type = "TIMESTAMP"
+nullable = true
+
+# Products table
+[[tables]]
+name = "products"
+description = "Product catalog"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "name"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "description"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "price"
+type = "REAL"
+nullable = false
+
+[[tables.columns]]
+name = "stock_quantity"
+type = "INTEGER"
+nullable = false
+default = "0"
+
+[[tables.columns]]
+name = "category"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+# Orders table
+[[tables]]
+name = "orders"
+description = "Customer orders"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "user_id"
+type = "INTEGER"
+nullable = false
+foreign_key = { table = "users", column = "id" }
+
+[[tables.columns]]
+name = "order_date"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+[[tables.columns]]
+name = "status"
+type = "TEXT"
+nullable = false
+default = "'pending'"
+
+[[tables.columns]]
+name = "total_amount"
+type = "REAL"
+nullable = false
+
+# Order items table
+[[tables]]
+name = "order_items"
+description = "Individual items within orders"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "order_id"
+type = "INTEGER"
+nullable = false
+foreign_key = { table = "orders", column = "id" }
+
+[[tables.columns]]
+name = "product_id"
+type = "INTEGER"
+nullable = false
+foreign_key = { table = "products", column = "id" }
+
+[[tables.columns]]
+name = "quantity"
+type = "INTEGER"
+nullable = false
+
+[[tables.columns]]
+name = "unit_price"
+type = "REAL"
+nullable = false
+
+# Initial data seeds
+[[data.users]]
+username = "admin"
+email = "admin@example.com"
+full_name = "System Administrator"
+is_active = true
+
+[[data.users]]
+username = "john_doe"
+email = "john@example.com"
+full_name = "John Doe"
+is_active = true
+
+[[data.users]]
+username = "jane_smith"
+email = "jane@example.com"
+full_name = "Jane Smith"
+is_active = true
+
+[[data.products]]
+name = "Laptop"
+description = "High-performance laptop for developers"
+price = 1299.99
+stock_quantity = 50
+category = "Electronics"
+
+[[data.products]]
+name = "Wireless Mouse"
+description = "Ergonomic wireless mouse"
+price = 39.99
+stock_quantity = 200
+category = "Electronics"
+
+[[data.products]]
+name = "USB-C Hub"
+description = "7-in-1 USB-C hub with HDMI"
+price = 49.99
+stock_quantity = 150
+category = "Electronics"
+
+[[data.products]]
+name = "Standing Desk"
+description = "Adjustable height standing desk"
+price = 399.99
+stock_quantity = 30
+category = "Furniture"
+
+[[data.products]]
+name = "Office Chair"
+description = "Ergonomic office chair with lumbar support"
+price = 249.99
+stock_quantity = 40
+category = "Furniture"
+
+# Indexes (optional)
+[[indexes]]
+table = "users"
+name = "idx_users_email"
+columns = ["email"]
+
+[[indexes]]
+table = "orders"
+name = "idx_orders_user_date"
+columns = ["user_id", "order_date"]
+
+[[indexes]]
+table = "order_items"
+name = "idx_order_items_order"
+columns = ["order_id"]

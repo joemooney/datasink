@@ -1,0 +1,129 @@
+# Blog Database Schema
+
+[database]
+name = "blog"
+description = "Simple blog database"
+version = "1.0.0"
+
+# Authors table
+[[tables]]
+name = "authors"
+description = "Blog authors"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "username"
+type = "TEXT"
+nullable = false
+unique = true
+
+[[tables.columns]]
+name = "email"
+type = "TEXT"
+nullable = false
+unique = true
+
+[[tables.columns]]
+name = "display_name"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "bio"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+# Posts table
+[[tables]]
+name = "posts"
+description = "Blog posts"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "author_id"
+type = "INTEGER"
+nullable = false
+foreign_key = { table = "authors", column = "id" }
+
+[[tables.columns]]
+name = "title"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "slug"
+type = "TEXT"
+nullable = false
+unique = true
+
+[[tables.columns]]
+name = "content"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "published"
+type = "BOOLEAN"
+nullable = false
+default = "false"
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+[[tables.columns]]
+name = "updated_at"
+type = "TIMESTAMP"
+nullable = true
+
+# Initial data
+[[data.authors]]
+username = "admin"
+email = "admin@blog.com"
+display_name = "Administrator"
+bio = "System administrator"
+
+[[data.authors]]
+username = "alice"
+email = "alice@blog.com"
+display_name = "Alice Johnson"
+bio = "Tech writer and developer advocate"
+
+[[data.posts]]
+author_id = 1
+title = "Welcome to DataSink Blog"
+slug = "welcome-to-datasink-blog"
+content = "This is the first post on our new blog powered by DataSink!"
+published = true
+
+[[data.posts]]
+author_id = 2
+title = "Getting Started with gRPC"
+slug = "getting-started-with-grpc"
+content = "In this tutorial, we'll explore the basics of gRPC and how to build services..."
+published = true
+
+[[data.posts]]
+author_id = 2
+title = "Draft: Advanced DataSink Features"
+slug = "advanced-datasink-features"
+content = "This post is still being written..."
+published = false

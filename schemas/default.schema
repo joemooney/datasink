@@ -1,0 +1,43 @@
+# Default DataSink Schema
+# This is the minimal default schema for a new database
+
+[database]
+name = "default"
+description = "Default database schema"
+version = "1.0.0"
+
+# System metadata table
+[[tables]]
+name = "_datasink_metadata"
+description = "Internal metadata table"
+
+[[tables.columns]]
+name = "key"
+type = "TEXT"
+primary_key = true
+nullable = false
+
+[[tables.columns]]
+name = "value"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+
+[[tables.columns]]
+name = "updated_at"
+type = "TIMESTAMP"
+nullable = true
+
+# Initial system metadata
+[[data._datasink_metadata]]
+key = "schema_version"
+value = "1.0.0"
+
+[[data._datasink_metadata]]
+key = "created_date"
+value = "2024-01-01"

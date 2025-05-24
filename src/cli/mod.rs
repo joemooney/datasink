@@ -37,6 +37,9 @@ pub enum Commands {
         /// Output format (json, table, csv)
         #[arg(short, long, default_value = "table")]
         format: String,
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
     },
     /// Insert data into a table
     Insert {
@@ -44,6 +47,9 @@ pub enum Commands {
         table: String,
         /// JSON data to insert (e.g., '{"id": 1, "name": "Alice"}')
         data: String,
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
     },
     /// Update data in a table
     Update {
@@ -54,6 +60,9 @@ pub enum Commands {
         /// WHERE clause (e.g., "id = 1")
         #[arg(short, long)]
         where_clause: String,
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
     },
     /// Delete data from a table
     Delete {
@@ -62,6 +71,9 @@ pub enum Commands {
         /// WHERE clause (e.g., "id = 1")
         #[arg(short, long)]
         where_clause: String,
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
     },
 }
 
@@ -87,5 +99,13 @@ pub enum ServerCommands {
     CreateDatabase {
         /// Database name/path
         name: String,
+    },
+    /// Create a database from a schema file
+    CreateFromSchema {
+        /// Path to the .schema file
+        schema_file: String,
+        /// Optional database name (overrides schema file)
+        #[arg(short, long)]
+        database_name: Option<String>,
     },
 }

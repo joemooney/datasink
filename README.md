@@ -10,6 +10,8 @@ A gRPC-based database service written in Rust that provides a flexible interface
 - **SQLite** support (with room for PostgreSQL, MySQL, etc.)
 - **Type-safe** conversions between protobuf and internal types
 - **Batch operations** for efficient data insertion
+- **Schema files** for defining database structure and initial data
+- **Multi-database support** (coming soon)
 
 ## Quick Start
 
@@ -32,6 +34,10 @@ datasink server start -b 0.0.0.0:8080  # Custom address
 
 # Create a database
 datasink server create-database mydb.db
+
+# Create a database from a schema file
+datasink server create-from-schema schemas/example.schema
+datasink server create-from-schema schemas/blog.schema -d myblog
 
 # Create a table (server must be running)
 datasink server create-table users '[{"name":"id","type":"INTEGER","primary_key":true},{"name":"name","type":"TEXT"}]'
@@ -87,6 +93,46 @@ src/
 └── proto/            # Protocol buffer definitions
     └── datasink.proto
 ```
+
+## Schema Files
+
+DataSink supports TOML-based schema files for defining database structure and initial data. Schema files allow you to:
+
+- Define multiple tables with columns and constraints
+- Specify initial seed data
+- Version your database schema
+- Create consistent development/test databases
+
+Example schema file structure:
+
+```toml
+[database]
+name = "myapp"
+description = "My application database"
+version = "1.0.0"
+
+[[tables]]
+name = "users"
+description = "User accounts"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+auto_increment = true
+
+[[tables.columns]]
+name = "email"
+type = "TEXT"
+nullable = false
+unique = true
+
+# Initial data
+[[data.users]]
+email = "admin@example.com"
+```
+
+See the `schemas/` directory for complete examples.
 
 ## Environment Variables
 

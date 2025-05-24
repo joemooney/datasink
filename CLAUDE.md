@@ -23,6 +23,14 @@ DataSink is a gRPC-based database service written in Rust that provides a flexib
    - Defines the gRPC service interface and message types
    - Supports streaming responses for query operations
 
+4. **Schema System** (`src/schema/`)
+   - `mod.rs` - Schema data structures
+   - `parser.rs` - TOML schema file parsing and processing
+
+5. **CLI Interface** (`src/cli/`)
+   - `mod.rs` - Command definitions using clap
+   - `commands.rs` - Command implementations
+
 ### Key Design Decisions
 
 - **Database Abstraction**: The `Database` trait allows for easy addition of new database backends (PostgreSQL, MySQL, etc.)
@@ -42,6 +50,7 @@ The application now includes a comprehensive CLI with subcommands:
 - `cargo run -- server start` - Start the gRPC server
 - `cargo run -- server start -b 0.0.0.0:8080` - Start on custom address
 - `cargo run -- server create-database mydb.db` - Create a new database
+- `cargo run -- server create-from-schema schemas/example.schema` - Create database from schema file
 - `cargo run -- server create-table users '[{"name":"id","type":"INTEGER","primary_key":true}]'` - Create a table
 
 #### Client Commands (require server to be running)
