@@ -3,8 +3,7 @@ use crate::grpc::DataSinkService;
 use crate::proto::data_sink_server::DataSinkServer;
 use crate::proto::{
     data_sink_client::DataSinkClient, query_response, value, ColumnDefinition, CreateTableRequest,
-    DataType, DeleteRequest, InsertRequest, InsertRow, QueryRequest, UpdateRequest, Value,
-    BatchInsertRequest,
+    DataType, DeleteRequest, InsertRequest, QueryRequest, UpdateRequest, Value,
 };
 use crate::schema::parser;
 use std::collections::HashMap;
@@ -115,7 +114,6 @@ pub async fn create_database(name: String) -> Result<(), Box<dyn std::error::Err
 pub async fn create_from_schema(
     schema_file: String,
     database_name: Option<String>,
-    server_address: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Load the schema file
     let schema_path = Path::new(&schema_file);
@@ -129,51 +127,25 @@ pub async fn create_from_schema(
     // Determine database name
     let db_name = database_name.unwrap_or_else(|| schema.database.name.clone());
     let db_file = format!("{}.db", db_name);
+    let db_url = format!("sqlite://{}?mode=rwc", db_file);
     
     println!("Creating database: {}", db_file);
-    create_database(db_file.clone()).await?;
     
-    // Start a temporary server to create tables and insert data
-    println!("Setting up database schema...");
-    
-    // Connect as a client to create tables
-    let mut client = DataSinkClient::connect(server_address.clone()).await?;
+    // Create database directly without server
+    let db = SqliteDatabase::connect(&db_url).await?;
     
     // Create tables
     for table in &schema.tables {
         println!("Creating table: {}", table.name);
         
-        let mut columns = Vec::new();
+        let mut db_columns = Vec::new();
         for col in &table.columns {
             let db_col = parser::column_def_to_db(col)?;
-            let data_type = match col.col_type.to_uppercase().as_str() {
-                "INTEGER" => DataType::Integer,
-                "REAL" => DataType::Real,
-                "TEXT" => DataType::Text,
-                "BLOB" => DataType::Blob,
-                "BOOLEAN" => DataType::Boolean,
-                "TIMESTAMP" => DataType::Timestamp,
-                _ => return Err(format!("Unknown data type: {}", col.col_type).into()),
-            };
-            
-            columns.push(ColumnDefinition {
-                name: col.name.clone(),
-                r#type: data_type as i32,
-                nullable: db_col.nullable,
-                primary_key: col.primary_key,
-                unique: col.unique,
-                default_value: col.default.clone().unwrap_or_default(),
-            });
+            db_columns.push(db_col);
         }
         
-        let request = CreateTableRequest {
-            table_name: table.name.clone(),
-            columns,
-        };
-        
-        let response = client.create_table(request).await?;
-        if !response.into_inner().success {
-            eprintln!("Warning: Failed to create table {}", table.name);
+        if let Err(e) = db.create_table(&table.name, db_columns).await {
+            eprintln!("Warning: Failed to create table {}: {}", table.name, e);
         }
     }
     
@@ -190,24 +162,16 @@ pub async fn create_from_schema(
             .find(|t| t.name == *table_name)
             .ok_or_else(|| format!("Table {} not found in schema", table_name))?;
         
-        // Prepare batch insert
-        let mut insert_rows = Vec::new();
+        // Insert rows using batch insert
+        let mut db_rows = Vec::new();
         for row_data in rows {
-            let values = parser::prepare_insert_data(table_def, row_data)?;
-            insert_rows.push(InsertRow { values });
+            let values = parser::prepare_insert_data_db(table_def, row_data)?;
+            db_rows.push(values);
         }
         
-        let batch_request = BatchInsertRequest {
-            table_name: table_name.clone(),
-            rows: insert_rows,
-        };
-        
-        let response = client.batch_insert(batch_request).await?;
-        let inner = response.into_inner();
-        if inner.success {
-            println!("  Inserted {} rows", inner.inserted_count);
-        } else {
-            eprintln!("  Warning: Failed to insert data: {}", inner.message);
+        match db.batch_insert(table_name, db_rows).await {
+            Ok(count) => println!("  Inserted {} rows", count),
+            Err(e) => eprintln!("  Warning: Failed to insert data: {}", e),
         }
     }
     

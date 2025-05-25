@@ -1,5 +1,5 @@
 use super::{ColumnDef, Schema};
-use crate::db::{traits::ColumnDef as DbColumnDef, traits::ColumnType};
+use crate::db::{traits::ColumnDef as DbColumnDef, traits::ColumnType, traits::DbValue};
 use crate::proto::{value, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -169,4 +169,94 @@ pub fn prepare_insert_data(
     }
 
     Ok(values)
+}
+
+pub fn prepare_insert_data_db(
+    table_def: &super::TableDef,
+    row_data: &HashMap<String, toml::Value>,
+) -> Result<HashMap<String, DbValue>, Box<dyn std::error::Error>> {
+    let mut values = HashMap::new();
+
+    for col in &table_def.columns {
+        // Skip auto-increment columns
+        if col.auto_increment {
+            continue;
+        }
+
+        if let Some(value) = row_data.get(&col.name) {
+            let db_value = toml_value_to_db(value, &col.col_type)?;
+            values.insert(col.name.clone(), db_value);
+        } else if let Some(default) = &col.default {
+            // Handle default values
+            match default.as_str() {
+                "CURRENT_TIMESTAMP" => {
+                    values.insert(
+                        col.name.clone(),
+                        DbValue::Timestamp(chrono::Utc::now().timestamp()),
+                    );
+                }
+                "true" => {
+                    values.insert(col.name.clone(), DbValue::Boolean(true));
+                }
+                "false" => {
+                    values.insert(col.name.clone(), DbValue::Boolean(false));
+                }
+                _ => {
+                    // Try to parse the default value based on column type
+                    match col.col_type.as_str() {
+                        "INTEGER" => {
+                            if let Ok(i) = default.parse::<i64>() {
+                                values.insert(col.name.clone(), DbValue::Integer(i));
+                            }
+                        }
+                        "REAL" => {
+                            if let Ok(f) = default.parse::<f64>() {
+                                values.insert(col.name.clone(), DbValue::Real(f));
+                            }
+                        }
+                        "TEXT" => {
+                            // Remove quotes if present
+                            let text = default.trim_matches('\'').trim_matches('"');
+                            values.insert(col.name.clone(), DbValue::Text(text.to_string()));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        } else if !col.nullable {
+            return Err(format!(
+                "Missing required field '{}' and no default value",
+                col.name
+            )
+            .into());
+        }
+    }
+
+    Ok(values)
+}
+
+fn toml_value_to_db(
+    value: &toml::Value,
+    expected_type: &str,
+) -> Result<DbValue, Box<dyn std::error::Error>> {
+    let db_value = match (value, expected_type.to_uppercase().as_str()) {
+        (toml::Value::Integer(i), "INTEGER") => DbValue::Integer(*i),
+        (toml::Value::Float(f), "REAL") => DbValue::Real(*f),
+        (toml::Value::String(s), "TEXT") => DbValue::Text(s.clone()),
+        (toml::Value::Boolean(b), "BOOLEAN") => DbValue::Boolean(*b),
+        (toml::Value::Integer(i), "TIMESTAMP") => DbValue::Timestamp(*i),
+        (toml::Value::String(s), "TIMESTAMP") if s == "CURRENT_TIMESTAMP" => {
+            // Handle special case for current timestamp
+            DbValue::Timestamp(chrono::Utc::now().timestamp())
+        }
+        _ => {
+            return Err(format!(
+                "Type mismatch: cannot convert {:?} to {}",
+                value, expected_type
+            )
+            .into())
+        }
+    };
+
+    Ok(db_value)
 }

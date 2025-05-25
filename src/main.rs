@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 commands::create_database(name).await?;
             }
             ServerCommands::CreateFromSchema { schema_file, database_name } => {
-                commands::create_from_schema(schema_file, database_name, cli.server_address).await?;
+                commands::create_from_schema(schema_file, database_name).await?;
             }
         },
         Commands::Query { sql, format, database: _ } => {
