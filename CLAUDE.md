@@ -93,3 +93,81 @@ To add support for a new database:
 2. Implement the `Database` trait for your backend
 3. Update `src/db/mod.rs` to export the new implementation
 4. Update dependencies in `Cargo.toml`
+
+## Development History
+
+This project was developed interactively with Claude. Here's the chronological history of major features added:
+
+### 1. Initial Setup
+**Request**: "this is a bare bones rust application. I want to build this out to be a server that receives database operations and can create new tables, insert, update, delete, and query. The requests should be GRPC. I'm guessing for a query we should be able to stream responses. Initially, we will use sqlite database, but we will want to be flexible so that we can support other databases in the future."
+
+**What was built**:
+- gRPC service definition with all CRUD operations
+- Database abstraction trait for multiple backend support
+- SQLite implementation
+- Streaming query support
+- Basic project structure with proper module organization
+
+### 2. CLI Interface
+**Request**: "please add '--help'. I suggest using structopt or maybe clap, and have subcommands for server, query, insert, update, delete. The server subcommand should have subcommands to start, stop, create table, create database."
+
+**What was added**:
+- Comprehensive CLI using clap v4
+- Server subcommands: start, stop, create-table, create-database
+- Client commands: query, insert, update, delete
+- Global options and help text
+- Support for different output formats (json, csv, table)
+
+### 3. Schema File Support
+**Request**: "I would like to be able to create a database based on a .schema file. This file would have the details necessary to create a some tables and maybe populate some initial data. There could be a command to create a database providing a .schema file. Please create an example .schema file. Each database would have an associated .schema file."
+
+**What was implemented**:
+- TOML-based schema file format
+- Schema parser for table definitions and initial data
+- `create-from-schema` command
+- Support for column constraints (primary key, unique, nullable, etc.)
+- Foreign key definitions (documentation only)
+- Default values and auto-increment support
+- Example schemas: default.schema, example.schema, blog.schema
+
+### 4. PostIt Schema
+**Request**: "I want to add a schema file called 'PostIt.schema' to store post-it notes. There is a title, description, creation date, status, priority, URL, and a list of tags. The status is open, closed, working, archived. priority is low, medium, high, critical."
+
+**What was created**:
+- PostIt.schema with three tables (notes, tags, note_tags)
+- Many-to-many relationship between notes and tags
+- Enum-like fields for status and priority
+- Sample data including notes and tag assignments
+- Example queries for common operations
+
+### 5. Help Examples
+**Request**: "Please add examples of invoking commands to the help for each subcommand (except for --help itself)"
+
+**What was added**:
+- Examples in help text for every command
+- 2-3 practical examples per command
+- Shows different options and use cases
+- Makes CLI self-documenting
+
+### 6. Proto Documentation
+**Request**: "Please update the .proto file with detailed comments"
+
+**What was done**:
+- Comprehensive comments for all service methods
+- Detailed message and field documentation
+- Usage examples and warnings
+- Type information and constraints
+
+### 7. GitHub Integration
+**Request**: "I have a GitHub account the the 'gh' CLI. Please create a repo and push all the changes"
+
+**Result**: Repository created at https://github.com/joemooney/datasink
+
+### Key Design Decisions Made During Development
+
+1. **Database Abstraction**: Used trait-based design to allow easy addition of new database backends
+2. **Streaming Queries**: Implemented streaming for large result sets to avoid memory issues
+3. **Schema Format**: Chose TOML for human-readable, version-controllable schema definitions
+4. **CLI Structure**: Used subcommands to logically group operations
+5. **Error Handling**: Comprehensive error types with helpful messages
+6. **Direct Database Access**: Schema creation works without requiring a running server
