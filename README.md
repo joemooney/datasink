@@ -25,8 +25,10 @@ A gRPC-based database service written in Rust that provides a flexible interface
 DataSink now includes a comprehensive command-line interface:
 
 ```bash
-# Show help
+# Show help (includes examples for each command)
 datasink --help
+datasink query --help
+datasink server create-table --help
 
 # Start the server
 datasink server start
