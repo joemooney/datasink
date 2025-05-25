@@ -39,7 +39,7 @@ datasink server create-database mydb.db
 
 # Create a database from a schema file
 datasink server create-from-schema schemas/example.schema
-datasink server create-from-schema schemas/blog.schema -d myblog
+datasink server create-from-schema schemas/blog.schema -n myblog
 
 # Create a table (server must be running)
 datasink server create-table users '[{"name":"id","type":"INTEGER","primary_key":true},{"name":"name","type":"TEXT"}]'

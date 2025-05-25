@@ -137,13 +137,13 @@ pub enum ServerCommands {
     /// Create a database from a schema file
     #[command(after_help = "Examples:
   datasink server create-from-schema schemas/example.schema
-  datasink server create-from-schema schemas/blog.schema -d myblog
-  datasink server create-from-schema /path/to/custom.schema")]
+  datasink server create-from-schema schemas/blog.schema -n myblog
+  datasink server create-from-schema /path/to/custom.schema --database-name myapp")]
     CreateFromSchema {
         /// Path to the .schema file
         schema_file: String,
         /// Optional database name (overrides schema file)
-        #[arg(short, long)]
+        #[arg(short = 'n', long)]
         database_name: Option<String>,
     },
 }
