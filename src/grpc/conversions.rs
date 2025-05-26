@@ -1,5 +1,5 @@
 use crate::db::traits::{ColumnDef, ColumnType, DbValue};
-use crate::proto::{self, ColumnDefinition, DataType, Value as ProtoValue};
+use crate::proto::common::{ColumnDefinition, DataType, Value as ProtoValue, value};
 use std::collections::HashMap;
 
 pub fn proto_to_column_type(data_type: DataType) -> ColumnType {
@@ -41,26 +41,26 @@ pub fn proto_to_column_def(def: ColumnDefinition) -> ColumnDef {
 
 pub fn proto_to_db_value(value: ProtoValue) -> DbValue {
     match value.value {
-        Some(proto::value::Value::IntValue(v)) => DbValue::Integer(v),
-        Some(proto::value::Value::RealValue(v)) => DbValue::Real(v),
-        Some(proto::value::Value::TextValue(v)) => DbValue::Text(v),
-        Some(proto::value::Value::BlobValue(v)) => DbValue::Blob(v),
-        Some(proto::value::Value::BoolValue(v)) => DbValue::Boolean(v),
-        Some(proto::value::Value::TimestampValue(v)) => DbValue::Timestamp(v),
-        Some(proto::value::Value::NullValue(_)) => DbValue::Null,
+        Some(value::Value::IntValue(v)) => DbValue::Integer(v),
+        Some(value::Value::RealValue(v)) => DbValue::Real(v),
+        Some(value::Value::TextValue(v)) => DbValue::Text(v),
+        Some(value::Value::BlobValue(v)) => DbValue::Blob(v),
+        Some(value::Value::BoolValue(v)) => DbValue::Boolean(v),
+        Some(value::Value::TimestampValue(v)) => DbValue::Timestamp(v),
+        Some(value::Value::NullValue(_)) => DbValue::Null,
         None => DbValue::Null,
     }
 }
 
 pub fn db_value_to_proto(value: DbValue) -> ProtoValue {
     let proto_value = match value {
-        DbValue::Integer(v) => proto::value::Value::IntValue(v),
-        DbValue::Real(v) => proto::value::Value::RealValue(v),
-        DbValue::Text(v) => proto::value::Value::TextValue(v),
-        DbValue::Blob(v) => proto::value::Value::BlobValue(v),
-        DbValue::Boolean(v) => proto::value::Value::BoolValue(v),
-        DbValue::Timestamp(v) => proto::value::Value::TimestampValue(v),
-        DbValue::Null => proto::value::Value::NullValue(true),
+        DbValue::Integer(v) => value::Value::IntValue(v),
+        DbValue::Real(v) => value::Value::RealValue(v),
+        DbValue::Text(v) => value::Value::TextValue(v),
+        DbValue::Blob(v) => value::Value::BlobValue(v),
+        DbValue::Boolean(v) => value::Value::BoolValue(v),
+        DbValue::Timestamp(v) => value::Value::TimestampValue(v),
+        DbValue::Null => value::Value::NullValue(true),
     };
 
     ProtoValue {

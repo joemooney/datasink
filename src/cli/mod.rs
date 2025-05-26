@@ -12,6 +12,11 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub database_url: Option<String>,
 
+    /// Database name (can also be set via DATABASE_NAME env var)
+    /// This will be used to infer the database URL as sqlite://<name>.db
+    #[arg(short = 'n', long, global = true)]
+    pub database_name: Option<String>,
+
     /// Server address for client commands
     #[arg(short, long, global = true, default_value = "http://127.0.0.1:50051")]
     pub server_address: String,
@@ -22,6 +27,69 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub command: Commands,
+}
+
+impl Cli {
+    /// Resolve the database URL from either database_url or database_name
+    /// with consistency checking and environment variable support
+    /// Database names are case-insensitive and will match existing files
+    pub fn resolve_database_url(&self) -> Result<String, String> {
+        // Get values from CLI args or environment variables
+        let db_url = self.database_url.clone()
+            .or_else(|| std::env::var("DATABASE_URL").ok());
+        
+        let db_name = self.database_name.clone()
+            .or_else(|| std::env::var("DATABASE_NAME").ok());
+        
+        match (db_url, db_name) {
+            // Both provided - check consistency (case-insensitive)
+            (Some(url), Some(name)) => {
+                let inferred_url = self.find_or_create_db_url(&name)?;
+                let url_lower = url.to_lowercase();
+                let inferred_lower = inferred_url.to_lowercase();
+                
+                if url_lower != inferred_lower {
+                    // Also check if URL ends with the database file name
+                    let db_file_lower = format!("/{}.db", name.to_lowercase());
+                    if !url_lower.ends_with(&db_file_lower) {
+                        return Err(format!(
+                            "Inconsistent database configuration: URL '{}' doesn't match name '{}'",
+                            url, name
+                        ));
+                    }
+                }
+                Ok(url)
+            }
+            // Only URL provided
+            (Some(url), None) => Ok(url),
+            // Only name provided - find existing or create new
+            (None, Some(name)) => self.find_or_create_db_url(&name),
+            // Neither provided - use default
+            (None, None) => Ok("sqlite://datasink.db".to_string()),
+        }
+    }
+    
+    /// Find existing database file (case-insensitive) or return path for new one
+    fn find_or_create_db_url(&self, name: &str) -> Result<String, String> {
+        let name_lower = name.to_lowercase();
+        
+        // Try to find existing database file with case-insensitive match
+        if let Ok(entries) = std::fs::read_dir(".") {
+            for entry in entries.flatten() {
+                if let Ok(file_name) = entry.file_name().into_string() {
+                    let file_lower = file_name.to_lowercase();
+                    
+                    // Check if this is a database file matching our name
+                    if file_lower == format!("{}.db", name_lower) {
+                        return Ok(format!("sqlite://{}", file_name));
+                    }
+                }
+            }
+        }
+        
+        // No existing file found, use the provided name as-is
+        Ok(format!("sqlite://{}.db", name))
+    }
 }
 
 #[derive(Subcommand)]
@@ -96,6 +164,15 @@ pub enum Commands {
         #[arg(short = 'D', long)]
         database: Option<String>,
     },
+    /// Schema information and statistics
+    #[command(after_help = "Examples:
+  datasink schema list-tables
+  datasink schema describe users
+  datasink schema stats")]
+    Schema {
+        #[command(subcommand)]
+        command: SchemaCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -145,5 +222,55 @@ pub enum ServerCommands {
         /// Optional database name (overrides schema file)
         #[arg(short = 'n', long)]
         database_name: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SchemaCommands {
+    /// List all tables in the database
+    #[command(name = "list-tables", after_help = "Examples:
+  datasink schema list-tables
+  datasink schema list-tables -D mydb")]
+    ListTables {
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
+    },
+    /// Describe table structure
+    #[command(name = "describe", after_help = "Examples:
+  datasink schema describe users
+  datasink schema describe products -D mydb")]
+    Describe {
+        /// Table name to describe
+        table: String,
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
+    },
+    /// Show database statistics
+    #[command(name = "stats", after_help = "Examples:
+  datasink schema stats
+  datasink schema stats -D mydb
+  datasink schema stats --detailed")]
+    Stats {
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
+        /// Show detailed statistics
+        #[arg(long)]
+        detailed: bool,
+    },
+    /// Display full database schema
+    #[command(name = "show", after_help = "Examples:
+  datasink schema show
+  datasink schema show -D mydb
+  datasink schema show --format sql")]
+    Show {
+        /// Target database (defaults to "default")
+        #[arg(short = 'D', long)]
+        database: Option<String>,
+        /// Output format (text, sql)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 }

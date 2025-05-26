@@ -2,6 +2,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile(&["proto/datasink.proto"], &["proto"])?;
+        .compile(
+            &[
+                "proto/common.proto",
+                "proto/admin.proto",
+                "proto/crud.proto",
+                "proto/datasink.proto",
+            ],
+            &["proto"],
+        )?;
     Ok(())
 }

@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package datasink.common;
+
+// Common data types and messages shared between admin and crud services
+
+// Defines a single column in a table
+message ColumnDefinition {
+    // Column name (e.g., "id", "email", "created_at")
+    string name = 1;
+    
+    // Data type of the column
+    DataType type = 2;
+    
+    // Whether NULL values are allowed (default: true)
+    bool nullable = 3;
+    
+    // Whether this column is the primary key
+    bool primary_key = 4;
+    
+    // Whether values in this column must be unique
+    bool unique = 5;
+    
+    // Default value for the column (as a string)
+    // Empty string means no default value
+    string default_value = 6;
+}
+
+// Supported data types for columns
+enum DataType {
+    // 64-bit signed integer
+    INTEGER = 0;
+    
+    // Double-precision floating point
+    REAL = 1;
+    
+    // Variable-length text string
+    TEXT = 2;
+    
+    // Binary data
+    BLOB = 3;
+    
+    // Boolean value (stored as INTEGER 0 or 1)
+    BOOLEAN = 4;
+    
+    // Unix timestamp (stored as INTEGER)
+    TIMESTAMP = 5;
+}
+
+// Represents a single value that can be stored in a database column
+// Uses protobuf's oneof to ensure type safety
+message Value {
+    oneof value {
+        // 64-bit signed integer value
+        int64 int_value = 1;
+        
+        // Double-precision floating point value
+        double real_value = 2;
+        
+        // Text string value
+        string text_value = 3;
+        
+        // Binary data value
+        bytes blob_value = 4;
+        
+        // Boolean value
+        bool bool_value = 5;
+        
+        // Unix timestamp (seconds since epoch)
+        int64 timestamp_value = 6;
+        
+        // Explicit NULL value (set to true to represent NULL)
+        bool null_value = 7;
+    }
+}
+
+// Metadata for a single result column
+message Column {
+    // Column name or alias
+    string name = 1;
+    
+    // Data type of the column
+    DataType type = 2;
+}
+
+// A single row of query results
+message Row {
+    // Values in column order
+    // Length must match the number of columns
+    repeated Value values = 1;
+}
+
+// Error information for failed operations
+message Error {
+    // Error code (e.g., "QUERY_ERROR", "CONNECTION_ERROR")
+    string code = 1;
+    
+    // Human-readable error message
+    string message = 2;
+}

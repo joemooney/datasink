@@ -1,10 +1,13 @@
 use crate::db::{Database, SqliteDatabase};
 use crate::grpc::DataSinkService;
 use crate::proto::data_sink_server::DataSinkServer;
-use crate::proto::{
-    data_sink_client::DataSinkClient, query_response, value, ColumnDefinition, CreateTableRequest,
-    DataType, DeleteRequest, InsertRequest, QueryRequest, UpdateRequest, Value,
+use crate::proto::data_sink_client::DataSinkClient;
+use crate::proto::admin::{CreateTableRequest};
+use crate::proto::crud::{
+    DeleteRequest, InsertRequest, QueryRequest, UpdateRequest, 
+    query_response, QueryResponse,
 };
+use crate::proto::common::{ColumnDefinition, DataType, Value, value};
 use crate::schema::parser;
 use std::collections::HashMap;
 use std::path::Path;
@@ -16,8 +19,15 @@ pub async fn start_server(
     database_url: String,
     bind_address: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Connecting to database: {}", database_url);
-    let db = SqliteDatabase::connect(&database_url).await?;
+    // Add create mode if not already present in the URL
+    let db_url = if database_url.contains("?") {
+        database_url
+    } else {
+        format!("{}?mode=rwc", database_url)
+    };
+    
+    info!("Connecting to database: {}", db_url);
+    let db = SqliteDatabase::connect(&db_url).await?;
 
     info!("Starting DataSink gRPC server on {}", bind_address);
     let addr = bind_address.parse()?;
@@ -93,20 +103,42 @@ pub async fn create_table(
 }
 
 pub async fn create_database(name: String) -> Result<(), Box<dyn std::error::Error>> {
-    // For SQLite, we just need to ensure the directory exists
-    if let Some(parent) = Path::new(&name).parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    // Connect to create the database file
-    let db_url = if name.starts_with("sqlite://") {
+    // Check if a database with the same name (case-insensitive) already exists
+    let db_file = if name.ends_with(".db") {
         name.clone()
     } else {
-        format!("sqlite://{}", name)
+        format!("{}.db", name)
+    };
+    
+    if let Ok(entries) = std::fs::read_dir(".") {
+        for entry in entries.flatten() {
+            if let Ok(file_name) = entry.file_name().into_string() {
+                if file_name.to_lowercase() == db_file.to_lowercase() {
+                    return Err(format!(
+                        "Database already exists: {} (case-insensitive match)",
+                        file_name
+                    ).into());
+                }
+            }
+        }
+    }
+    
+    // For SQLite, we just need to ensure the directory exists
+    if let Some(parent) = Path::new(&db_file).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    // Connect to create the database file with create mode
+    let db_url = if name.starts_with("sqlite://") {
+        format!("{}?mode=rwc", name)
+    } else {
+        format!("sqlite://{}?mode=rwc", db_file)
     };
 
     let _db = SqliteDatabase::connect(&db_url).await?;
-    println!("Database created: {}", name);
+    println!("Database created: {}", db_file);
 
     Ok(())
 }
@@ -205,7 +237,7 @@ pub async fn query(
 
     while let Some(response) = stream.next().await {
         match response? {
-            crate::proto::QueryResponse {
+            QueryResponse {
                 response: Some(query_response::Response::ResultSet(result_set)),
             } => {
                 if !result_set.columns.is_empty() {
@@ -215,7 +247,7 @@ pub async fn query(
                     rows.push(row.values);
                 }
             }
-            crate::proto::QueryResponse {
+            QueryResponse {
                 response: Some(query_response::Response::Error(error)),
             } => {
                 eprintln!("Query error: {} - {}", error.code, error.message);
@@ -430,4 +462,289 @@ fn proto_value_to_json(value: Value) -> serde_json::Value {
         }
         _ => serde_json::Value::Null,
     }
+}
+
+pub async fn list_tables(server_address: String) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = DataSinkClient::connect(server_address).await?;
+
+    let request = QueryRequest {
+        sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
+        parameters: HashMap::new(),
+    };
+
+    let mut stream = client.query(request).await?.into_inner();
+    let mut tables = Vec::new();
+
+    while let Some(response) = stream.next().await {
+        match response? {
+            QueryResponse {
+                response: Some(query_response::Response::ResultSet(result_set)),
+            } => {
+                for row in result_set.rows {
+                    if let Some(value) = row.values.first() {
+                        if let Some(value::Value::TextValue(table_name)) = &value.value {
+                            tables.push(table_name.clone());
+                        }
+                    }
+                }
+            }
+            QueryResponse {
+                response: Some(query_response::Response::Error(error)),
+            } => {
+                eprintln!("Query error: {} - {}", error.code, error.message);
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
+    if tables.is_empty() {
+        println!("No tables found in database");
+    } else {
+        println!("Tables:");
+        for table in tables {
+            println!("  {}", table);
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn describe_table(
+    server_address: String,
+    table_name: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = DataSinkClient::connect(server_address).await?;
+
+    let request = QueryRequest {
+        sql: format!("PRAGMA table_info({})", table_name),
+        parameters: HashMap::new(),
+    };
+
+    let mut stream = client.query(request).await?.into_inner();
+    let mut columns = Vec::new();
+    let mut rows = Vec::new();
+
+    while let Some(response) = stream.next().await {
+        match response? {
+            QueryResponse {
+                response: Some(query_response::Response::ResultSet(result_set)),
+            } => {
+                if !result_set.columns.is_empty() {
+                    columns = result_set.columns;
+                }
+                for row in result_set.rows {
+                    rows.push(row.values);
+                }
+            }
+            QueryResponse {
+                response: Some(query_response::Response::Error(error)),
+            } => {
+                eprintln!("Query error: {} - {}", error.code, error.message);
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
+    if rows.is_empty() {
+        println!("Table '{}' not found", table_name);
+        return Ok(());
+    }
+
+    println!("Table: {}", table_name);
+    println!("Columns:");
+    println!("  Name          Type      Nullable  Primary Key  Default");
+    println!("  {}","-".repeat(60));
+
+    for row in rows {
+        if row.len() >= 6 {
+            let name = proto_value_to_string(row[1].clone());
+            let type_name = proto_value_to_string(row[2].clone());
+            let nullable = if proto_value_to_string(row[3].clone()) == "0" { "YES" } else { "NO" };
+            let pk = if proto_value_to_string(row[5].clone()) == "0" { "NO" } else { "YES" };
+            let default = proto_value_to_string(row[4].clone());
+            let default_display = if default == "NULL" { "-" } else { &default };
+
+            println!("  {:<12}  {:<8}  {:<8}  {:<11}  {}", 
+                name, type_name, nullable, pk, default_display);
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn show_stats(
+    server_address: String,
+    detailed: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = DataSinkClient::connect(server_address.clone()).await?;
+
+    // First get all tables
+    let tables_request = QueryRequest {
+        sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
+        parameters: HashMap::new(),
+    };
+
+    let mut stream = client.query(tables_request).await?.into_inner();
+    let mut tables = Vec::new();
+
+    while let Some(response) = stream.next().await {
+        match response? {
+            QueryResponse {
+                response: Some(query_response::Response::ResultSet(result_set)),
+            } => {
+                for row in result_set.rows {
+                    if let Some(value) = row.values.first() {
+                        if let Some(value::Value::TextValue(table_name)) = &value.value {
+                            tables.push(table_name.clone());
+                        }
+                    }
+                }
+            }
+            QueryResponse {
+                response: Some(query_response::Response::Error(error)),
+            } => {
+                eprintln!("Query error: {} - {}", error.code, error.message);
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
+    if tables.is_empty() {
+        println!("No tables found in database");
+        return Ok(());
+    }
+
+    println!("Database Statistics:");
+    println!("  Total tables: {}", tables.len());
+    println!();
+    println!("Row counts by table:");
+    println!("  {:<20}  {}", "Table", "Rows");
+    println!("  {}", "-".repeat(30));
+
+    let mut total_rows = 0;
+    for table in &tables {
+        // Reconnect for each query to avoid stream issues
+        let mut client = DataSinkClient::connect(server_address.clone()).await?;
+        
+        let count_request = QueryRequest {
+            sql: format!("SELECT COUNT(*) FROM {}", table),
+            parameters: HashMap::new(),
+        };
+
+        let mut stream = client.query(count_request).await?.into_inner();
+        let mut count = 0;
+
+        while let Some(response) = stream.next().await {
+            match response? {
+                QueryResponse {
+                    response: Some(query_response::Response::ResultSet(result_set)),
+                } => {
+                    for row in result_set.rows {
+                        if let Some(value) = row.values.first() {
+                            if let Some(value::Value::IntValue(row_count)) = &value.value {
+                                count = *row_count;
+                            }
+                        }
+                    }
+                }
+                QueryResponse {
+                    response: Some(query_response::Response::Error(error)),
+                } => {
+                    eprintln!("Error counting {}: {} - {}", table, error.code, error.message);
+                    continue;
+                }
+                _ => {}
+            }
+        }
+
+        println!("  {:<20}  {}", table, count);
+        total_rows += count;
+    }
+
+    println!("  {}", "-".repeat(30));
+    println!("  {:<20}  {}", "Total", total_rows);
+
+    if detailed {
+        println!();
+        println!("Detailed table information:");
+        for table in &tables {
+            describe_table(server_address.clone(), table.clone()).await?;
+            println!();
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn show_schema(
+    server_address: String,
+    format: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = DataSinkClient::connect(server_address).await?;
+
+    let request = QueryRequest {
+        sql: "SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
+        parameters: HashMap::new(),
+    };
+
+    let mut stream = client.query(request).await?.into_inner();
+    let mut schemas = Vec::new();
+
+    while let Some(response) = stream.next().await {
+        match response? {
+            QueryResponse {
+                response: Some(query_response::Response::ResultSet(result_set)),
+            } => {
+                for row in result_set.rows {
+                    if let Some(value) = row.values.first() {
+                        if let Some(value::Value::TextValue(sql)) = &value.value {
+                            schemas.push(sql.clone());
+                        }
+                    }
+                }
+            }
+            QueryResponse {
+                response: Some(query_response::Response::Error(error)),
+            } => {
+                eprintln!("Query error: {} - {}", error.code, error.message);
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
+    if schemas.is_empty() {
+        println!("No tables found in database");
+        return Ok(());
+    }
+
+    match format.as_str() {
+        "sql" => {
+            println!("-- Database Schema");
+            for schema in schemas {
+                println!("{};", schema);
+                println!();
+            }
+        }
+        "json" => {
+            let json_schemas: Vec<serde_json::Value> = schemas
+                .into_iter()
+                .map(|s| serde_json::Value::String(s))
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&json_schemas)?);
+        }
+        _ => {
+            println!("Database Schema:");
+            println!("{}", "=".repeat(50));
+            for schema in schemas {
+                println!("{}", schema);
+                println!("{}", "-".repeat(50));
+            }
+        }
+    }
+
+    Ok(())
 }

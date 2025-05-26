@@ -3,6 +3,15 @@ mod db;
 mod grpc;
 mod schema;
 mod proto {
+    pub mod common {
+        tonic::include_proto!("datasink.common");
+    }
+    pub mod admin {
+        tonic::include_proto!("datasink.admin");
+    }
+    pub mod crud {
+        tonic::include_proto!("datasink.crud");
+    }
     tonic::include_proto!("datasink");
 }
 
@@ -10,7 +19,7 @@ use clap::Parser;
 use tracing::Level;
 use tracing_subscriber;
 
-use crate::cli::{commands, Cli, Commands, ServerCommands};
+use crate::cli::{commands, Cli, Commands, ServerCommands, SchemaCommands};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,12 +33,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tracing_subscriber::fmt().with_max_level(log_level).init();
 
-    // Get database URL from CLI or environment
-    let database_url = cli
-        .database_url
-        .clone()
-        .or_else(|| std::env::var("DATABASE_URL").ok())
-        .unwrap_or_else(|| "sqlite://datasink.db".to_string());
+    // Get database URL from CLI or environment with consistency checking
+    let database_url = match cli.resolve_database_url() {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     match cli.command {
         Commands::Server { command } => match command {
@@ -73,6 +84,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             // TODO: Pass database parameter when multi-database support is implemented
             commands::delete(cli.server_address, table, where_clause).await?;
+        }
+        Commands::Schema { command } => match command {
+            SchemaCommands::ListTables { database: _ } => {
+                commands::list_tables(cli.server_address).await?;
+            }
+            SchemaCommands::Describe { table, database: _ } => {
+                commands::describe_table(cli.server_address, table).await?;
+            }
+            SchemaCommands::Stats { database: _, detailed } => {
+                commands::show_stats(cli.server_address, detailed).await?;
+            }
+            SchemaCommands::Show { database: _, format } => {
+                commands::show_schema(cli.server_address, format).await?;
+            }
         }
     }
 

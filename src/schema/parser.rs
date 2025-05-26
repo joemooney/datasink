@@ -1,6 +1,6 @@
 use super::{ColumnDef, Schema};
 use crate::db::{traits::ColumnDef as DbColumnDef, traits::ColumnType, traits::DbValue};
-use crate::proto::{value, Value};
+use crate::proto::common::{value, Value};
 use std::collections::HashMap;
 use std::path::Path;
 

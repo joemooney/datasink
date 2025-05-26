@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package datasink.crud;
+
+import "common.proto";
+
+// CrudService provides Create, Read, Update, and Delete operations
+// for database tables, including batch operations and streaming queries.
+service CrudService {
+    // Data operations
+    
+    // Insert adds a single row to the specified table.
+    // Returns the ID of the inserted row (if applicable).
+    rpc Insert(InsertRequest) returns (InsertResponse);
+    
+    // Update modifies existing rows that match the WHERE clause.
+    // Returns the number of affected rows.
+    rpc Update(UpdateRequest) returns (UpdateResponse);
+    
+    // Delete removes rows that match the WHERE clause.
+    // Returns the number of deleted rows.
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    
+    // Query operations
+    
+    // Query executes a SQL query and returns results as a stream.
+    // This allows efficient handling of large result sets without
+    // loading all data into memory at once.
+    // The first message in the stream contains column metadata.
+    rpc Query(QueryRequest) returns (stream QueryResponse);
+    
+    // Batch operations
+    
+    // BatchInsert efficiently inserts multiple rows in a single transaction.
+    // This is more efficient than multiple individual Insert calls.
+    rpc BatchInsert(BatchInsertRequest) returns (BatchInsertResponse);
+}
+
+// Request to insert a single row into a table
+message InsertRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // Map of column names to values for the new row
+    // Example: {"id": 1, "name": "Alice", "email": "alice@example.com"}
+    map<string, datasink.common.Value> values = 2;
+}
+
+// Response from Insert operation
+message InsertResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // ID of the inserted row (if auto-increment/ROWID is used)
+    // -1 if not applicable
+    int64 inserted_id = 3;
+}
+
+// Request to update existing rows in a table
+message UpdateRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // Map of column names to new values
+    // Only specified columns will be updated
+    map<string, datasink.common.Value> values = 2;
+    
+    // SQL WHERE clause to identify rows to update
+    // Example: "id = 1", "age > 18 AND status = 'active'"
+    // WARNING: Empty where_clause will update ALL rows
+    string where_clause = 3;
+}
+
+// Response from Update operation
+message UpdateResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // Number of rows that were updated
+    int64 affected_rows = 3;
+}
+
+// Request to delete rows from a table
+message DeleteRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // SQL WHERE clause to identify rows to delete
+    // Example: "id = 1", "created_at < '2023-01-01'"
+    // WARNING: Empty where_clause will delete ALL rows
+    string where_clause = 2;
+}
+
+// Response from Delete operation
+message DeleteResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // Number of rows that were deleted
+    int64 affected_rows = 3;
+}
+
+// Request to execute a SQL query
+message QueryRequest {
+    // SQL query to execute
+    // Supports SELECT and other read-only queries
+    // Example: "SELECT * FROM users WHERE age > ?"
+    string sql = 1;
+    
+    // Optional named parameters for parameterized queries
+    // Example: {"min_age": 18, "status": "active"}
+    // Note: Parameter binding syntax depends on the database backend
+    map<string, datasink.common.Value> parameters = 2;
+}
+
+// Response from Query operation
+// Streamed to support large result sets
+message QueryResponse {
+    oneof response {
+        // Contains query results (columns and/or rows)
+        ResultSet result_set = 1;
+        
+        // Contains error information if query failed
+        datasink.common.Error error = 2;
+    }
+}
+
+// Container for query results
+message ResultSet {
+    // Column metadata (sent in first stream message)
+    // Empty in subsequent messages
+    repeated datasink.common.Column columns = 1;
+    
+    // Data rows (can be sent across multiple stream messages)
+    repeated datasink.common.Row rows = 2;
+}
+
+// Request to insert multiple rows in a single transaction
+message BatchInsertRequest {
+    // Target table name
+    string table_name = 1;
+    
+    // List of rows to insert
+    // All rows must have compatible schemas
+    repeated InsertRow rows = 2;
+}
+
+// A single row for batch insertion
+message InsertRow {
+    // Map of column names to values
+    // Missing columns will use default values or NULL
+    map<string, datasink.common.Value> values = 1;
+}
+
+// Response from BatchInsert operation
+message BatchInsertResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+    
+    // Number of rows successfully inserted
+    int64 inserted_count = 3;
+}

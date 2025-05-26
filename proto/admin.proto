@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package datasink.admin;
+
+import "common.proto";
+
+// AdminService provides database administration operations
+// such as table management and schema operations.
+service AdminService {
+    // Table operations
+    
+    // CreateTable creates a new table with the specified schema.
+    // Returns an error if the table already exists.
+    rpc CreateTable(CreateTableRequest) returns (CreateTableResponse);
+    
+    // DropTable removes an existing table and all its data.
+    // This operation is irreversible. Use with caution.
+    rpc DropTable(DropTableRequest) returns (DropTableResponse);
+}
+
+// Request to create a new table
+message CreateTableRequest {
+    // Name of the table to create (e.g., "users", "products")
+    string table_name = 1;
+    
+    // List of column definitions for the table schema
+    repeated datasink.common.ColumnDefinition columns = 2;
+}
+
+// Response from CreateTable operation
+message CreateTableResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+}
+
+// Request to drop (delete) a table
+message DropTableRequest {
+    // Name of the table to drop
+    string table_name = 1;
+}
+
+// Response from DropTable operation
+message DropTableResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+}

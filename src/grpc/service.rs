@@ -6,12 +6,16 @@ use tonic::{Request, Response, Status};
 
 use crate::db::{Database, DatabaseError};
 use crate::grpc::conversions::*;
-use crate::proto::{
-    data_sink_server::DataSink, query_response, BatchInsertRequest, BatchInsertResponse,
-    Column as ProtoColumn, CreateTableRequest, CreateTableResponse, DeleteRequest, DeleteResponse,
-    DropTableRequest, DropTableResponse, Error, InsertRequest, InsertResponse, QueryRequest,
-    QueryResponse, ResultSet, Row, UpdateRequest, UpdateResponse,
+use crate::proto::data_sink_server::DataSink;
+use crate::proto::admin::{
+    CreateTableRequest, CreateTableResponse, DropTableRequest, DropTableResponse,
 };
+use crate::proto::crud::{
+    BatchInsertRequest, BatchInsertResponse, DeleteRequest, DeleteResponse,
+    InsertRequest, InsertResponse, QueryRequest, QueryResponse, ResultSet,
+    UpdateRequest, UpdateResponse, query_response,
+};
+use crate::proto::common::{Column as ProtoColumn, Error, Row};
 
 pub struct DataSinkService {
     db: Arc<RwLock<Box<dyn Database>>>,
