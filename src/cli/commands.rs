@@ -522,7 +522,6 @@ pub async fn describe_table(
     };
 
     let mut stream = client.query(request).await?.into_inner();
-    let mut columns = Vec::new();
     let mut rows = Vec::new();
 
     while let Some(response) = stream.next().await {
@@ -530,9 +529,6 @@ pub async fn describe_table(
             QueryResponse {
                 response: Some(query_response::Response::ResultSet(result_set)),
             } => {
-                if !result_set.columns.is_empty() {
-                    columns = result_set.columns;
-                }
                 for row in result_set.rows {
                     rows.push(row.values);
                 }

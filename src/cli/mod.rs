@@ -71,10 +71,15 @@ impl Cli {
     
     /// Find existing database file (case-insensitive) or return path for new one
     fn find_or_create_db_url(&self, name: &str) -> Result<String, String> {
+        self.find_or_create_db_url_in_dir(name, ".")
+    }
+    
+    /// Find existing database file (case-insensitive) in a specific directory or return path for new one
+    fn find_or_create_db_url_in_dir(&self, name: &str, dir: &str) -> Result<String, String> {
         let name_lower = name.to_lowercase();
         
         // Try to find existing database file with case-insensitive match
-        if let Ok(entries) = std::fs::read_dir(".") {
+        if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 if let Ok(file_name) = entry.file_name().into_string() {
                     let file_lower = file_name.to_lowercase();
@@ -281,8 +286,10 @@ mod tests {
     use std::env;
     use std::fs;
     use tempfile::TempDir;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_resolve_database_url_default() {
         // Clear any existing env vars first
         env::remove_var("DATABASE_URL");
@@ -304,10 +311,11 @@ mod tests {
 
     #[test]
     fn test_resolve_database_url_with_name() {
-        let temp_dir = TempDir::new().unwrap();
-        let original_dir = env::current_dir().unwrap();
-        env::set_current_dir(&temp_dir).unwrap();
-
+        // Clear any existing env vars first
+        env::remove_var("DATABASE_URL");
+        env::remove_var("DATABASE_NAME");
+        
+        // Don't change directories - just test the logic
         let cli = Cli {
             database_url: None,
             database_name: Some("testdb".to_string()),
@@ -320,8 +328,6 @@ mod tests {
 
         let result = cli.resolve_database_url().unwrap();
         assert_eq!(result, "sqlite://testdb.db");
-        
-        env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
@@ -375,16 +381,21 @@ mod tests {
 
     #[test]
     fn test_case_insensitive_database_matching() {
+        // Clear any existing env vars first
+        env::remove_var("DATABASE_URL");
+        env::remove_var("DATABASE_NAME");
+        
         let temp_dir = TempDir::new().unwrap();
-        let original_dir = env::current_dir().unwrap();
-        env::set_current_dir(&temp_dir).unwrap();
+        let temp_path = temp_dir.path();
+        
+        // Create a database file with mixed case in temp dir
+        let db_path = temp_path.join("TestDB.db");
+        fs::write(&db_path, "").unwrap();
 
-        // Create a database file with mixed case
-        fs::write("TestDB.db", "").unwrap();
-
+        // Test the find_or_create_db_url_in_dir method directly
         let cli = Cli {
             database_url: None,
-            database_name: Some("testdb".to_string()), // lowercase
+            database_name: None,
             server_address: "http://127.0.0.1:50051".to_string(),
             verbose: false,
             command: Commands::Server {
@@ -392,13 +403,36 @@ mod tests {
             },
         };
 
-        let result = cli.resolve_database_url().unwrap();
-        assert_eq!(result, "sqlite://TestDB.db"); // Should find the actual file
+        let result = cli.find_or_create_db_url_in_dir("testdb", temp_path.to_str().unwrap()).unwrap();
+        assert_eq!(result, "sqlite://TestDB.db"); // Should find the actual file with correct case
+    }
+    
+    #[test]
+    fn test_database_matching_no_file_exists() {
+        // Clear any existing env vars first
+        env::remove_var("DATABASE_URL");
+        env::remove_var("DATABASE_NAME");
+        
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        
+        // Don't create any files - test the fallback behavior
+        let cli = Cli {
+            database_url: None,
+            database_name: None,
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
 
-        env::set_current_dir(original_dir).unwrap();
+        let result = cli.find_or_create_db_url_in_dir("testdb", temp_path.to_str().unwrap()).unwrap();
+        assert_eq!(result, "sqlite://testdb.db"); // Should return the name as-is when no file exists
     }
 
     #[test]
+    #[serial]
     fn test_environment_variable_database_url() {
         // Clear any existing env vars first
         env::remove_var("DATABASE_URL");
@@ -423,12 +457,21 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_environment_variable_database_name() {
         // Clear any existing env vars first
         env::remove_var("DATABASE_URL");
         env::remove_var("DATABASE_NAME");
         
+        // Work in a temp directory to avoid any interference
+        let temp_dir = TempDir::new().unwrap();
+        let _original_dir = env::current_dir().unwrap();
+        env::set_current_dir(&temp_dir).unwrap();
+        
         env::set_var("DATABASE_NAME", "envdb");
+        
+        // Verify the env var is set
+        assert_eq!(env::var("DATABASE_NAME").unwrap(), "envdb");
         
         let cli = Cli {
             database_url: None,
@@ -440,9 +483,12 @@ mod tests {
             },
         };
 
-        let result = cli.resolve_database_url().unwrap();
-        assert_eq!(result, "sqlite://envdb.db");
+        // Test resolve_database_url which should pick up the DATABASE_NAME env var
+        let result = cli.resolve_database_url();
+        assert!(result.is_ok(), "resolve_database_url failed: {:?}", result);
+        assert_eq!(result.unwrap(), "sqlite://envdb.db");
         
         env::remove_var("DATABASE_NAME");
+        env::set_current_dir(&_original_dir).unwrap();
     }
 }
