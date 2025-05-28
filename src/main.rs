@@ -1,7 +1,7 @@
 mod cli;
-mod db;
+pub mod db;
 mod grpc;
-mod schema;
+pub mod schema;
 mod proto {
     pub mod common {
         tonic::include_proto!("datasink.common");

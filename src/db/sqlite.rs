@@ -71,11 +71,25 @@ impl SqliteDatabase {
     }
 
     async fn row_to_values(row: &sqlx::sqlite::SqliteRow) -> Result<Vec<DbValue>> {
+        use sqlx::Row;
+        use sqlx::ValueRef;
+        
         let mut values = Vec::new();
         let column_count = row.len();
 
         for i in 0..column_count {
+            // First check if the value is NULL
+            let raw_value = row.try_get_raw(i)?;
+            if raw_value.is_null() {
+                values.push(DbValue::Null);
+                continue;
+            }
+            
+            // Try different types in order
             let value = if let Ok(v) = row.try_get::<i64, _>(i) {
+                // Check if this might be a boolean (0 or 1)
+                // We need column type info to determine this properly
+                // For now, we'll treat all integers as integers
                 DbValue::Integer(v)
             } else if let Ok(v) = row.try_get::<f64, _>(i) {
                 DbValue::Real(v)

@@ -274,3 +274,175 @@ pub enum SchemaCommands {
         format: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_resolve_database_url_default() {
+        // Clear any existing env vars first
+        env::remove_var("DATABASE_URL");
+        env::remove_var("DATABASE_NAME");
+        
+        let cli = Cli {
+            database_url: None,
+            database_name: None,
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://datasink.db");
+    }
+
+    #[test]
+    fn test_resolve_database_url_with_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(&temp_dir).unwrap();
+
+        let cli = Cli {
+            database_url: None,
+            database_name: Some("testdb".to_string()),
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://testdb.db");
+        
+        env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_resolve_database_url_with_url() {
+        let cli = Cli {
+            database_url: Some("sqlite://custom.db".to_string()),
+            database_name: None,
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://custom.db");
+    }
+
+    #[test]
+    fn test_resolve_database_url_consistency_check_pass() {
+        let cli = Cli {
+            database_url: Some("sqlite://myapp.db".to_string()),
+            database_name: Some("myapp".to_string()),
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://myapp.db");
+    }
+
+    #[test]
+    fn test_resolve_database_url_consistency_check_fail() {
+        let cli = Cli {
+            database_url: Some("sqlite://other.db".to_string()),
+            database_name: Some("myapp".to_string()),
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Inconsistent database configuration"));
+    }
+
+    #[test]
+    fn test_case_insensitive_database_matching() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(&temp_dir).unwrap();
+
+        // Create a database file with mixed case
+        fs::write("TestDB.db", "").unwrap();
+
+        let cli = Cli {
+            database_url: None,
+            database_name: Some("testdb".to_string()), // lowercase
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://TestDB.db"); // Should find the actual file
+
+        env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_environment_variable_database_url() {
+        // Clear any existing env vars first
+        env::remove_var("DATABASE_URL");
+        env::remove_var("DATABASE_NAME");
+        
+        env::set_var("DATABASE_URL", "sqlite://env.db");
+        
+        let cli = Cli {
+            database_url: None,
+            database_name: None,
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://env.db");
+        
+        env::remove_var("DATABASE_URL");
+    }
+
+    #[test]
+    fn test_environment_variable_database_name() {
+        // Clear any existing env vars first
+        env::remove_var("DATABASE_URL");
+        env::remove_var("DATABASE_NAME");
+        
+        env::set_var("DATABASE_NAME", "envdb");
+        
+        let cli = Cli {
+            database_url: None,
+            database_name: None,
+            server_address: "http://127.0.0.1:50051".to_string(),
+            verbose: false,
+            command: Commands::Server {
+                command: ServerCommands::Stop,
+            },
+        };
+
+        let result = cli.resolve_database_url().unwrap();
+        assert_eq!(result, "sqlite://envdb.db");
+        
+        env::remove_var("DATABASE_NAME");
+    }
+}
