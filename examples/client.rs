@@ -3,16 +3,27 @@
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
-// Include the proto module
+// Include the proto modules
 pub mod proto {
+    pub mod common {
+        tonic::include_proto!("datasink.common");
+    }
+    pub mod admin {
+        tonic::include_proto!("datasink.admin");
+    }
+    pub mod crud {
+        tonic::include_proto!("datasink.crud");
+    }
     tonic::include_proto!("datasink");
 }
 
-use proto::{
-    data_sink_client::DataSinkClient, query_response, value, BatchInsertRequest, ColumnDefinition,
-    CreateTableRequest, DataType, DeleteRequest, InsertRequest, InsertRow, QueryRequest,
-    QueryResponse, UpdateRequest, Value,
+use proto::data_sink_client::DataSinkClient;
+use proto::admin::{CreateTableRequest};
+use proto::crud::{
+    BatchInsertRequest, DeleteRequest, InsertRequest, InsertRow, 
+    QueryRequest, QueryResponse, UpdateRequest, query_response,
 };
+use proto::common::{ColumnDefinition, DataType, Value, value};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
