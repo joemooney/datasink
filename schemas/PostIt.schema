@@ -34,6 +34,12 @@ nullable = false
 default = "CURRENT_TIMESTAMP"
 
 [[tables.columns]]
+name = "created_by"
+type = "TEXT"
+nullable = true
+# Username of the person who created this note
+
+[[tables.columns]]
 name = "status"
 type = "TEXT"
 nullable = false
@@ -134,6 +140,7 @@ title = "Welcome to PostIt!"
 description = "This is your post-it notes system. Create notes, set priorities, and organize with tags."
 status = "open"
 priority = "low"
+created_by = "admin"
 
 [[data.notes]]
 title = "Setup database backups"
@@ -141,12 +148,14 @@ description = "Configure automatic daily backups for the PostIt database"
 status = "open"
 priority = "high"
 url = "https://docs.example.com/backup-guide"
+created_by = "alice"
 
 [[data.notes]]
 title = "Team meeting notes"
 description = "Discuss Q1 roadmap and resource allocation"
 status = "working"
 priority = "medium"
+created_by = "bob"
 
 [[data.notes]]
 title = "Fix login timeout issue"
@@ -154,12 +163,14 @@ description = "Users are being logged out after 5 minutes of inactivity"
 status = "open"
 priority = "critical"
 url = "https://github.com/example/app/issues/123"
+created_by = "alice"
 
 [[data.notes]]
 title = "Old project cleanup"
 description = "Remove deprecated API endpoints from v1"
 status = "archived"
 priority = "low"
+created_by = "charlie"
 
 # Sample note-tag relationships
 [[data.note_tags]]
