@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod validation;
 
 use clap::{Parser, Subcommand};
 
@@ -34,6 +35,8 @@ impl Cli {
     /// with consistency checking and environment variable support
     /// Database names are case-insensitive and will match existing files
     pub fn resolve_database_url(&self) -> Result<String, String> {
+        use validation::validate_database_url;
+        
         // Get values from CLI args or environment variables
         let db_url = self.database_url.clone()
             .or_else(|| std::env::var("DATABASE_URL").ok());
@@ -44,8 +47,9 @@ impl Cli {
         match (db_url, db_name) {
             // Both provided - check consistency (case-insensitive)
             (Some(url), Some(name)) => {
+                let validated_url = validate_database_url(&url)?;
                 let inferred_url = self.find_or_create_db_url(&name)?;
-                let url_lower = url.to_lowercase();
+                let url_lower = validated_url.to_lowercase();
                 let inferred_lower = inferred_url.to_lowercase();
                 
                 if url_lower != inferred_lower {
@@ -54,14 +58,14 @@ impl Cli {
                     if !url_lower.ends_with(&db_file_lower) {
                         return Err(format!(
                             "Inconsistent database configuration: URL '{}' doesn't match name '{}'",
-                            url, name
+                            validated_url, name
                         ));
                     }
                 }
-                Ok(url)
+                Ok(validated_url)
             }
             // Only URL provided
-            (Some(url), None) => Ok(url),
+            (Some(url), None) => validate_database_url(&url),
             // Only name provided - find existing or create new
             (None, Some(name)) => self.find_or_create_db_url(&name),
             // Neither provided - use default

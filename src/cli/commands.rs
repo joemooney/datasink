@@ -19,11 +19,16 @@ pub async fn start_server(
     database_url: String,
     bind_address: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::cli::validation::validate_database_url;
+    
+    // Validate and normalize the database URL
+    let validated_url = validate_database_url(&database_url)?;
+    
     // Add create mode if not already present in the URL
-    let db_url = if database_url.contains("?") {
-        database_url
+    let db_url = if validated_url.contains("?") {
+        validated_url
     } else {
-        format!("{}?mode=rwc", database_url)
+        format!("{}?mode=rwc", validated_url)
     };
     
     info!("Connecting to database: {}", db_url);
@@ -549,7 +554,7 @@ pub async fn list_tables(
     let request = QueryRequest {
         sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
         parameters: HashMap::new(),
-        database: database.unwrap_or_default(),
+        database: database.clone().unwrap_or_default(),
     };
 
     let mut stream = client.query(request).await?.into_inner();
@@ -579,9 +584,20 @@ pub async fn list_tables(
     }
 
     if tables.is_empty() {
-        println!("No tables found in database");
+        let db_info = if database.is_some() {
+            format!(" '{}'", database.as_ref().unwrap())
+        } else {
+            " (default)".to_string()
+        };
+        println!("No tables found in database{}", db_info);
+        println!("Tip: Use 'datasink server status' to see available databases");
     } else {
-        println!("Tables:");
+        let db_info = if database.is_some() {
+            format!(" '{}'", database.as_ref().unwrap())
+        } else {
+            " (default)".to_string()
+        };
+        println!("Tables in database{}:", db_info);
         for table in tables {
             println!("  {}", table);
         }
