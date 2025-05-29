@@ -19,6 +19,12 @@ service DataSink {
     // This operation is irreversible. Use with caution.
     rpc DropTable(datasink.admin.DropTableRequest) returns (datasink.admin.DropTableResponse);
     
+    // GetServerStatus returns information about connected databases and server status.
+    rpc GetServerStatus(datasink.admin.ServerStatusRequest) returns (datasink.admin.ServerStatusResponse);
+    
+    // AddDatabase adds a new database connection to the server.
+    rpc AddDatabase(datasink.admin.AddDatabaseRequest) returns (datasink.admin.AddDatabaseResponse);
+    
     // CRUD operations (from crud.proto)
     
     // Insert adds a single row to the specified table.

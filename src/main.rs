@@ -50,8 +50,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ServerCommands::Stop => {
                 commands::stop_server(cli.server_address).await?;
             }
+            ServerCommands::Status => {
+                commands::server_status(cli.server_address).await?;
+            }
+            ServerCommands::AddDatabase { name, url } => {
+                commands::add_database(cli.server_address, name, url).await?;
+            }
             ServerCommands::CreateTable { name, columns } => {
-                commands::create_table(cli.server_address, name, columns).await?;
+                commands::create_table(cli.server_address, name, columns, None).await?;
             }
             ServerCommands::CreateDatabase { name } => {
                 commands::create_database(name).await?;
@@ -60,43 +66,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 commands::create_from_schema(schema_file, database_name).await?;
             }
         },
-        Commands::Query { sql, format, database: _ } => {
-            // TODO: Pass database parameter when multi-database support is implemented
-            commands::query(cli.server_address, sql, format).await?;
+        Commands::Query { sql, format, database } => {
+            commands::query(cli.server_address, sql, format, database).await?;
         }
-        Commands::Insert { table, data, database: _ } => {
-            // TODO: Pass database parameter when multi-database support is implemented
-            commands::insert(cli.server_address, table, data).await?;
+        Commands::Insert { table, data, database } => {
+            commands::insert(cli.server_address, table, data, database).await?;
         }
         Commands::Update {
             table,
             data,
             where_clause,
-            database: _,
+            database,
         } => {
-            // TODO: Pass database parameter when multi-database support is implemented
-            commands::update(cli.server_address, table, data, where_clause).await?;
+            commands::update(cli.server_address, table, data, where_clause, database).await?;
         }
         Commands::Delete {
             table,
             where_clause,
-            database: _,
+            database,
         } => {
-            // TODO: Pass database parameter when multi-database support is implemented
-            commands::delete(cli.server_address, table, where_clause).await?;
+            commands::delete(cli.server_address, table, where_clause, database).await?;
         }
         Commands::Schema { command } => match command {
-            SchemaCommands::ListTables { database: _ } => {
-                commands::list_tables(cli.server_address).await?;
+            SchemaCommands::ListTables { database } => {
+                commands::list_tables(cli.server_address, database).await?;
             }
-            SchemaCommands::Describe { table, database: _ } => {
-                commands::describe_table(cli.server_address, table).await?;
+            SchemaCommands::Describe { table, database } => {
+                commands::describe_table(cli.server_address, table, database).await?;
             }
-            SchemaCommands::Stats { database: _, detailed } => {
-                commands::show_stats(cli.server_address, detailed).await?;
+            SchemaCommands::Stats { database, detailed } => {
+                commands::show_stats(cli.server_address, detailed, database).await?;
             }
-            SchemaCommands::Show { database: _, format } => {
-                commands::show_schema(cli.server_address, format).await?;
+            SchemaCommands::Show { database, format } => {
+                commands::show_schema(cli.server_address, format, database).await?;
             }
         }
     }

@@ -16,6 +16,12 @@ service AdminService {
     // DropTable removes an existing table and all its data.
     // This operation is irreversible. Use with caution.
     rpc DropTable(DropTableRequest) returns (DropTableResponse);
+    
+    // GetServerStatus returns information about connected databases and server status.
+    rpc GetServerStatus(ServerStatusRequest) returns (ServerStatusResponse);
+    
+    // AddDatabase adds a new database connection to the server.
+    rpc AddDatabase(AddDatabaseRequest) returns (AddDatabaseResponse);
 }
 
 // Request to create a new table
@@ -25,6 +31,9 @@ message CreateTableRequest {
     
     // List of column definitions for the table schema
     repeated datasink.common.ColumnDefinition columns = 2;
+    
+    // Optional database name (uses default if not specified)
+    string database = 3;
 }
 
 // Response from CreateTable operation
@@ -40,10 +49,66 @@ message CreateTableResponse {
 message DropTableRequest {
     // Name of the table to drop
     string table_name = 1;
+    
+    // Optional database name (uses default if not specified)
+    string database = 2;
 }
 
 // Response from DropTable operation
 message DropTableResponse {
+    // Whether the operation succeeded
+    bool success = 1;
+    
+    // Human-readable message describing the result
+    string message = 2;
+}
+
+// Request for server status information  
+message ServerStatusRequest {
+    // No fields needed - just a trigger to get status
+}
+
+// Response containing server status and database information
+message ServerStatusResponse {
+    // Whether the server is running normally
+    bool server_running = 1;
+    
+    // Server uptime in seconds
+    int64 uptime_seconds = 2;
+    
+    // List of connected databases
+    repeated DatabaseStatus databases = 3;
+}
+
+// Information about a connected database
+message DatabaseStatus {
+    // Database name/identifier
+    string name = 1;
+    
+    // Database connection URL (may be redacted for security)
+    string url = 2;
+    
+    // Whether the database is currently connected
+    bool connected = 3;
+    
+    // When the database was connected (Unix timestamp)
+    int64 connection_time = 4;
+    
+    // Number of active connections or queries (optional)
+    int32 active_connections = 5;
+}
+
+// Request to add a new database connection
+message AddDatabaseRequest {
+    // Database name/identifier
+    string name = 1;
+    
+    // Database connection URL
+    string url = 2;
+}
+
+// Response from AddDatabase operation
+message AddDatabaseResponse {
     // Whether the operation succeeded
     bool success = 1;
     

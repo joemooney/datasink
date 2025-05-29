@@ -196,6 +196,20 @@ pub enum ServerCommands {
     #[command(after_help = "Examples:
   datasink server stop")]
     Stop,
+    /// Show server status and connected databases
+    #[command(after_help = "Examples:
+  datasink server status")]
+    Status,
+    /// Add a database to the running server
+    #[command(after_help = "Examples:
+  datasink server add-database analytics sqlite://analytics.db
+  datasink server add-database logs sqlite:///var/data/logs.db")]
+    AddDatabase {
+        /// Database name/identifier
+        name: String,
+        /// Database URL
+        url: String,
+    },
     /// Create a new table
     #[command(after_help = "Examples:
   datasink server create-table users '[{\"name\":\"id\",\"type\":\"INTEGER\",\"primary_key\":true}]'

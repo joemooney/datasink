@@ -1,8 +1,8 @@
-use crate::db::{Database, SqliteDatabase};
+use crate::db::{Database, SqliteDatabase, DatabaseManager};
 use crate::grpc::DataSinkService;
 use crate::proto::data_sink_server::DataSinkServer;
 use crate::proto::data_sink_client::DataSinkClient;
-use crate::proto::admin::{CreateTableRequest};
+use crate::proto::admin::{CreateTableRequest, ServerStatusRequest, AddDatabaseRequest};
 use crate::proto::crud::{
     DeleteRequest, InsertRequest, QueryRequest, UpdateRequest, 
     query_response, QueryResponse,
@@ -27,12 +27,15 @@ pub async fn start_server(
     };
     
     info!("Connecting to database: {}", db_url);
-    let db = SqliteDatabase::connect(&db_url).await?;
-
+    
+    // Create database manager and add the primary database
+    let db_manager = std::sync::Arc::new(DatabaseManager::new());
+    db_manager.add_database("default".to_string(), db_url.clone()).await?;
+    
     info!("Starting DataSink gRPC server on {}", bind_address);
     let addr = bind_address.parse()?;
 
-    let service = DataSinkService::new(Box::new(db));
+    let service = DataSinkService::new_with_manager(db_manager);
 
     Server::builder()
         .add_service(DataSinkServer::new(service))
@@ -50,10 +53,71 @@ pub async fn stop_server(_server_address: String) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
+pub async fn server_status(server_address: String) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = DataSinkClient::connect(server_address).await?;
+    
+    let request = ServerStatusRequest {};
+    let response = client.get_server_status(request).await?;
+    let status = response.into_inner();
+    
+    println!("🚀 DataSink Server Status");
+    println!("========================");
+    println!("Status: {}", if status.server_running { "🟢 Running" } else { "🔴 Stopped" });
+    println!("Uptime: {} seconds", status.uptime_seconds);
+    println!();
+    
+    if status.databases.is_empty() {
+        println!("📋 No databases connected");
+    } else {
+        println!("📋 Connected Databases ({}):", status.databases.len());
+        println!();
+        for db in status.databases {
+            let connection_time = if db.connection_time > 0 {
+                let dt = chrono::DateTime::from_timestamp(db.connection_time, 0)
+                    .unwrap_or_else(|| chrono::Utc::now());
+                dt.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+            } else {
+                "Unknown".to_string()
+            };
+            
+            println!("  📊 Database: {}", db.name);
+            println!("     URL: {}", db.url);
+            println!("     Status: {}", if db.connected { "🟢 Connected" } else { "🔴 Disconnected" });
+            println!("     Connected: {}", connection_time);
+            println!("     Active Connections: {}", db.active_connections);
+            println!();
+        }
+    }
+    
+    Ok(())
+}
+
+pub async fn add_database(
+    server_address: String,
+    name: String,
+    url: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = DataSinkClient::connect(server_address).await?;
+    
+    let request = AddDatabaseRequest { name: name.clone(), url };
+    let response = client.add_database(request).await?;
+    let result = response.into_inner();
+    
+    if result.success {
+        println!("✅ {}", result.message);
+    } else {
+        eprintln!("❌ {}", result.message);
+        std::process::exit(1);
+    }
+    
+    Ok(())
+}
+
 pub async fn create_table(
     server_address: String,
     table_name: String,
     columns_json: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
@@ -88,6 +152,7 @@ pub async fn create_table(
     let request = CreateTableRequest {
         table_name,
         columns,
+        database: database.unwrap_or_default(),
     };
 
     let response = client.create_table(request).await?;
@@ -223,12 +288,14 @@ pub async fn query(
     server_address: String,
     sql: String,
     format: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
     let request = QueryRequest {
         sql,
         parameters: HashMap::new(),
+        database: database.unwrap_or_default(),
     };
 
     let mut stream = client.query(request).await?.into_inner();
@@ -322,13 +389,18 @@ pub async fn insert(
     server_address: String,
     table_name: String,
     data_json: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
     let data: serde_json::Value = serde_json::from_str(&data_json)?;
     let values = json_to_proto_values(data)?;
 
-    let request = InsertRequest { table_name, values };
+    let request = InsertRequest { 
+        table_name, 
+        values,
+        database: database.unwrap_or_default(),
+    };
 
     let response = client.insert(request).await?;
     let inner = response.into_inner();
@@ -347,6 +419,7 @@ pub async fn update(
     table_name: String,
     data_json: String,
     where_clause: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
@@ -357,6 +430,7 @@ pub async fn update(
         table_name,
         values,
         where_clause,
+        database: database.unwrap_or_default(),
     };
 
     let response = client.update(request).await?;
@@ -375,12 +449,14 @@ pub async fn delete(
     server_address: String,
     table_name: String,
     where_clause: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
     let request = DeleteRequest {
         table_name,
         where_clause,
+        database: database.unwrap_or_default(),
     };
 
     let response = client.delete(request).await?;
@@ -464,12 +540,16 @@ fn proto_value_to_json(value: Value) -> serde_json::Value {
     }
 }
 
-pub async fn list_tables(server_address: String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn list_tables(
+    server_address: String,
+    database: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
     let request = QueryRequest {
         sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
         parameters: HashMap::new(),
+        database: database.unwrap_or_default(),
     };
 
     let mut stream = client.query(request).await?.into_inner();
@@ -513,12 +593,14 @@ pub async fn list_tables(server_address: String) -> Result<(), Box<dyn std::erro
 pub async fn describe_table(
     server_address: String,
     table_name: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
     let request = QueryRequest {
         sql: format!("PRAGMA table_info({})", table_name),
         parameters: HashMap::new(),
+        database: database.unwrap_or_default(),
     };
 
     let mut stream = client.query(request).await?.into_inner();
@@ -573,6 +655,7 @@ pub async fn describe_table(
 pub async fn show_stats(
     server_address: String,
     detailed: bool,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address.clone()).await?;
 
@@ -580,6 +663,7 @@ pub async fn show_stats(
     let tables_request = QueryRequest {
         sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
         parameters: HashMap::new(),
+        database: database.clone().unwrap_or_default(),
     };
 
     let mut stream = client.query(tables_request).await?.into_inner();
@@ -628,6 +712,7 @@ pub async fn show_stats(
         let count_request = QueryRequest {
             sql: format!("SELECT COUNT(*) FROM {}", table),
             parameters: HashMap::new(),
+            database: database.clone().unwrap_or_default(),
         };
 
         let mut stream = client.query(count_request).await?.into_inner();
@@ -667,7 +752,7 @@ pub async fn show_stats(
         println!();
         println!("Detailed table information:");
         for table in &tables {
-            describe_table(server_address.clone(), table.clone()).await?;
+            describe_table(server_address.clone(), table.clone(), database.clone()).await?;
             println!();
         }
     }
@@ -678,12 +763,14 @@ pub async fn show_stats(
 pub async fn show_schema(
     server_address: String,
     format: String,
+    database: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = DataSinkClient::connect(server_address).await?;
 
     let request = QueryRequest {
         sql: "SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
         parameters: HashMap::new(),
+        database: database.unwrap_or_default(),
     };
 
     let mut stream = client.query(request).await?.into_inner();
