@@ -14,6 +14,7 @@ use std::path::Path;
 use tokio_stream::StreamExt;
 use tonic::transport::Server;
 use tracing::info;
+use tabled::{builder::Builder as TableBuilder, settings::{Style, object::Segment, Alignment, Modify}};
 
 pub async fn start_server(
     database_url: String,
@@ -363,26 +364,31 @@ pub async fn query(
             }
         }
         _ => {
-            // Table format (default)
-            if !columns.is_empty() {
-                // Print header
-                println!(
-                    "{}",
-                    columns
-                        .iter()
-                        .map(|c| &c.name)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                );
-                println!("{}", "-".repeat(80));
-
-                // Print rows
+            // Table format (default) using tabled
+            if !columns.is_empty() && !rows.is_empty() {
+                let mut table_builder = TableBuilder::default();
+                
+                // Add header
+                let header: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
+                table_builder.push_record(header);
+                
+                // Add rows
                 for row in rows {
-                    let values: Vec<String> =
-                        row.into_iter().map(|v| proto_value_to_string(v)).collect();
-                    println!("{}", values.join(" | "));
+                    let values: Vec<String> = row.into_iter()
+                        .map(|v| proto_value_to_string(v))
+                        .collect();
+                    table_builder.push_record(values);
                 }
+                
+                let mut table = table_builder.build();
+                table.with(Style::rounded())
+                    .with(Modify::new(Segment::all()).with(Alignment::left()));
+                
+                println!("{}", table);
+            } else if columns.is_empty() {
+                println!("No results returned");
+            } else {
+                println!("Empty result set");
             }
         }
     }
@@ -647,10 +653,10 @@ pub async fn describe_table(
     }
 
     println!("Table: {}", table_name);
-    println!("Columns:");
-    println!("  Name          Type      Nullable  Primary Key  Default");
-    println!("  {}","-".repeat(60));
-
+    
+    let mut table_builder = TableBuilder::default();
+    table_builder.push_record(vec!["Name", "Type", "Nullable", "Primary Key", "Default"]);
+    
     for row in rows {
         if row.len() >= 6 {
             let name = proto_value_to_string(row[1].clone());
@@ -658,12 +664,16 @@ pub async fn describe_table(
             let nullable = if proto_value_to_string(row[3].clone()) == "0" { "YES" } else { "NO" };
             let pk = if proto_value_to_string(row[5].clone()) == "0" { "NO" } else { "YES" };
             let default = proto_value_to_string(row[4].clone());
-            let default_display = if default == "NULL" { "-" } else { &default };
-
-            println!("  {:<12}  {:<8}  {:<8}  {:<11}  {}", 
-                name, type_name, nullable, pk, default_display);
+            let default_display = if default == "NULL" { "-".to_string() } else { default };
+            
+            table_builder.push_record(vec![name, type_name, nullable.to_string(), pk.to_string(), default_display]);
         }
     }
+    
+    let mut table = table_builder.build();
+    table.with(Style::rounded());
+    
+    println!("{}", table);
 
     Ok(())
 }
@@ -716,10 +726,10 @@ pub async fn show_stats(
     println!("Database Statistics:");
     println!("  Total tables: {}", tables.len());
     println!();
-    println!("Row counts by table:");
-    println!("  {:<20}  {}", "Table", "Rows");
-    println!("  {}", "-".repeat(30));
-
+    
+    let mut table_builder = TableBuilder::default();
+    table_builder.push_record(vec!["Table", "Rows"]);
+    
     let mut total_rows = 0;
     for table in &tables {
         // Reconnect for each query to avoid stream issues
@@ -757,12 +767,17 @@ pub async fn show_stats(
             }
         }
 
-        println!("  {:<20}  {}", table, count);
+        table_builder.push_record(vec![table.clone(), count.to_string()]);
         total_rows += count;
     }
-
-    println!("  {}", "-".repeat(30));
-    println!("  {:<20}  {}", "Total", total_rows);
+    
+    // Add total row
+    table_builder.push_record(vec!["Total".to_string(), total_rows.to_string()]);
+    
+    let mut table = table_builder.build();
+    table.with(Style::rounded());
+    
+    println!("{}", table);
 
     if detailed {
         println!();
