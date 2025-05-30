@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures::stream;
-use sqlx::{sqlite::SqlitePool, Row, Sqlite};
+use sqlx::{sqlite::SqlitePool, Row, Sqlite, Column};
 use std::collections::HashMap;
 
 use crate::db::{
@@ -228,10 +228,13 @@ impl Database for SqliteDatabase {
 
         // Get column information from the first row
         let first_row = &rows[0];
-        let columns = (0..first_row.len())
-            .map(|i| {
-                let col_name = format!("column_{}", i); // SQLite doesn't always provide column names
-                (col_name, ColumnType::Text) // Default to text for now
+        let columns = first_row.columns()
+            .iter()
+            .map(|col| {
+                let col_name = col.name().to_string();
+                // Try to determine column type - default to Text for simplicity
+                // In a more robust implementation, we'd query sqlite_master or use type info
+                (col_name, ColumnType::Text)
             })
             .collect();
 
