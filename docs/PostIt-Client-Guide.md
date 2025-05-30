@@ -83,17 +83,145 @@ Junction table for many-to-many relationship between notes and tags.
 
 ## API Communication
 
+### Important: Web Browsers Cannot Connect Directly to gRPC
+
+DataSink runs a native gRPC server (default port 50051), but web browsers cannot connect directly to gRPC servers. You need a proxy or gateway:
+
 ### Connection Options
 
-1. **gRPC-Web** (Recommended for direct gRPC)
+1. **gRPC-Web Proxy** (For gRPC-style communication)
+   
+   You need to run a gRPC-Web proxy like Envoy that translates between gRPC-Web and gRPC:
+   
+   ```yaml
+   # envoy.yaml example
+   static_resources:
+     listeners:
+     - name: listener_0
+       address:
+         socket_address: { address: 0.0.0.0, port_value: 8080 }
+       filter_chains:
+       - filters:
+         - name: envoy.filters.network.http_connection_manager
+           typed_config:
+             "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+             codec_type: auto
+             stat_prefix: ingress_http
+             route_config:
+               name: local_route
+               virtual_hosts:
+               - name: local_service
+                 domains: ["*"]
+                 routes:
+                 - match: { prefix: "/" }
+                   route:
+                     cluster: datasink_service
+                     timeout: 0s
+                     max_stream_duration:
+                       grpc_timeout_header_max: 0s
+                 cors:
+                   allow_origin_string_match:
+                   - prefix: "*"
+                   allow_methods: GET, PUT, DELETE, POST, OPTIONS
+                   allow_headers: keep-alive,user-agent,cache-control,content-type,content-transfer-encoding,custom-header-1,x-accept-content-transfer-encoding,x-accept-response-streaming,x-user-agent,x-grpc-web,grpc-timeout
+                   max_age: "1728000"
+                   expose_headers: custom-header-1,grpc-status,grpc-message
+             http_filters:
+             - name: envoy.filters.http.grpc_web
+               typed_config:
+                 "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+             - name: envoy.filters.http.cors
+               typed_config:
+                 "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+             - name: envoy.filters.http.router
+               typed_config:
+                 "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+     clusters:
+     - name: datasink_service
+       connect_timeout: 0.25s
+       type: logical_dns
+       http2_protocol_options: {}
+       lb_policy: round_robin
+       load_assignment:
+         cluster_name: datasink_service
+         endpoints:
+         - lb_endpoints:
+           - endpoint:
+               address:
+                 socket_address:
+                   address: 127.0.0.1
+                   port_value: 50051  # Your DataSink gRPC server port
+   ```
+   
+   Then in your JavaScript:
    ```javascript
    import { DataSinkClient } from './generated/datasink_grpc_web_pb';
-   import { QueryRequest } from './generated/datasink_pb';
-   
-   const client = new DataSinkClient('http://localhost:8080');
+   const client = new DataSinkClient('http://localhost:8080'); // Envoy proxy port
    ```
 
-2. **REST API Proxy** (Easier integration)
+2. **REST API Gateway** (Easier - Recommended for quick start)
+   
+   Create a simple Node.js/Express gateway that translates REST to gRPC:
+   
+   ```javascript
+   // rest-gateway.js
+   const express = require('express');
+   const cors = require('cors');
+   const grpc = require('@grpc/grpc-js');
+   const protoLoader = require('@grpc/proto-loader');
+   
+   const app = express();
+   app.use(cors());
+   app.use(express.json());
+   
+   // Load DataSink proto
+   const packageDefinition = protoLoader.loadSync(
+     'path/to/datasink.proto',
+     { keepCase: true, longs: String, enums: String, defaults: true, oneofs: true }
+   );
+   const datasink = grpc.loadPackageDefinition(packageDefinition).datasink;
+   
+   // Connect to DataSink gRPC server
+   const client = new datasink.DataSink(
+     '127.0.0.1:50051', 
+     grpc.credentials.createInsecure()
+   );
+   
+   // REST endpoint for queries
+   app.post('/api/query', (req, res) => {
+     const { sql, parameters = {}, database = '' } = req.body;
+     
+     const request = { sql, parameters, database };
+     const call = client.query(request);
+     
+     let results = { columns: [], rows: [] };
+     
+     call.on('data', (response) => {
+       if (response.result_set) {
+         if (response.result_set.columns.length > 0) {
+           results.columns = response.result_set.columns;
+         }
+         results.rows.push(...response.result_set.rows);
+       }
+     });
+     
+     call.on('end', () => {
+       res.json(results);
+     });
+     
+     call.on('error', (error) => {
+       res.status(500).json({ error: error.message });
+     });
+   });
+   
+   // Similar endpoints for insert, update, delete...
+   
+   app.listen(3000, () => {
+     console.log('REST gateway listening on port 3000');
+   });
+   ```
+   
+   Then in your frontend:
    ```javascript
    const API_BASE = 'http://localhost:3000/api';
    
@@ -105,6 +233,17 @@ Junction table for many-to-many relationship between notes and tags.
      });
      return response.json();
    }
+   ```
+
+3. **Direct CLI Usage** (For development/testing only)
+   
+   During development, you can use the DataSink CLI and pipe JSON output:
+   ```bash
+   # Start server
+   datasink server start -b 127.0.0.1:50051
+   
+   # Query via CLI with JSON output
+   datasink query "SELECT * FROM notes" -f json
    ```
 
 ### Database Selection
