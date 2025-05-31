@@ -91,8 +91,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             SchemaCommands::ListTables { database } => {
                 commands::list_tables(cli.server_address, database).await?;
             }
-            SchemaCommands::Describe { table, database } => {
-                commands::describe_table(cli.server_address, table, database).await?;
+            SchemaCommands::Describe { tables, database } => {
+                commands::describe_tables(cli.server_address, tables, database).await?;
             }
             SchemaCommands::Stats { database, detailed } => {
                 commands::show_stats(cli.server_address, detailed, database).await?;

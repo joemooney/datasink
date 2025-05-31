@@ -612,6 +612,73 @@ pub async fn list_tables(
     Ok(())
 }
 
+pub async fn describe_tables(
+    server_address: String,
+    table_names: Vec<String>,
+    database: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // If no tables specified, describe all tables
+    let tables_to_describe = if table_names.is_empty() {
+        // Get all tables first
+        let mut client = DataSinkClient::connect(server_address.clone()).await?;
+        let request = QueryRequest {
+            sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name".to_string(),
+            parameters: HashMap::new(),
+            database: database.clone().unwrap_or_default(),
+        };
+
+        let mut stream = client.query(request).await?.into_inner();
+        let mut all_tables = Vec::new();
+
+        while let Some(response) = stream.next().await {
+            match response? {
+                QueryResponse {
+                    response: Some(query_response::Response::ResultSet(result_set)),
+                } => {
+                    for row in result_set.rows {
+                        if let Some(value) = row.values.first() {
+                            if let Some(value::Value::TextValue(table_name)) = &value.value {
+                                all_tables.push(table_name.clone());
+                            }
+                        }
+                    }
+                }
+                QueryResponse {
+                    response: Some(query_response::Response::Error(error)),
+                } => {
+                    eprintln!("Query error: {} - {}", error.code, error.message);
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+
+        if all_tables.is_empty() {
+            let db_info = if database.is_some() {
+                format!(" '{}'", database.as_ref().unwrap())
+            } else {
+                " (default)".to_string()
+            };
+            println!("No tables found in database{}", db_info);
+            return Ok(());
+        }
+
+        all_tables
+    } else {
+        table_names
+    };
+
+    // Describe each table
+    for (i, table_name) in tables_to_describe.iter().enumerate() {
+        if i > 0 {
+            println!(); // Add spacing between tables
+        }
+        describe_table(server_address.clone(), table_name.clone(), database.clone()).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn describe_table(
     server_address: String,
     table_name: String,

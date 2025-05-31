@@ -262,10 +262,11 @@ pub enum SchemaCommands {
     /// Describe table structure
     #[command(name = "describe", after_help = "Examples:
   datasink schema describe users
-  datasink schema describe products -D mydb")]
+  datasink schema describe users products tags
+  datasink schema describe -D mydb")]
     Describe {
-        /// Table name to describe
-        table: String,
+        /// Table names to describe (describe all tables if none provided)
+        tables: Vec<String>,
         /// Target database (defaults to "default")
         #[arg(short = 'D', long)]
         database: Option<String>,
