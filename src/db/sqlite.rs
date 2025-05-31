@@ -203,11 +203,53 @@ impl Database for SqliteDatabase {
     }
 
     async fn delete(&self, table_name: &str, where_clause: &str) -> Result<u64> {
-        let sql = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
-
-        let result = sqlx::query(&sql).execute(&self.pool).await?;
-
-        Ok(result.rows_affected())
+        // Special handling for notes table - archive before deletion
+        if table_name == "notes" {
+            // Start a transaction to ensure atomicity
+            let mut tx = self.pool.begin().await?;
+            
+            // Archive the notes to be deleted
+            let archive_sql = format!(
+                "INSERT INTO notes_archive (id, title, description, created_at, created_by, status, priority, url, deleted_at, deleted_by)
+                 SELECT id, title, description, created_at, created_by, status, priority, url, strftime('%s', 'now'), NULL
+                 FROM notes WHERE {}", 
+                where_clause
+            );
+            sqlx::query(&archive_sql).execute(&mut *tx).await?;
+            
+            // Archive the note_tags relationships
+            let archive_tags_sql = format!(
+                "INSERT INTO note_tags_archive (note_id, tag_id, deleted_at)
+                 SELECT nt.note_id, nt.tag_id, strftime('%s', 'now')
+                 FROM note_tags nt
+                 INNER JOIN notes n ON nt.note_id = n.id
+                 WHERE {}", 
+                where_clause
+            );
+            sqlx::query(&archive_tags_sql).execute(&mut *tx).await?;
+            
+            // Delete the note_tags relationships
+            let delete_tags_sql = format!(
+                "DELETE FROM note_tags 
+                 WHERE note_id IN (SELECT id FROM notes WHERE {})", 
+                where_clause
+            );
+            sqlx::query(&delete_tags_sql).execute(&mut *tx).await?;
+            
+            // Now delete the notes
+            let delete_sql = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
+            let result = sqlx::query(&delete_sql).execute(&mut *tx).await?;
+            
+            // Commit the transaction
+            tx.commit().await?;
+            
+            Ok(result.rows_affected())
+        } else {
+            // Regular delete for other tables
+            let sql = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
+            let result = sqlx::query(&sql).execute(&self.pool).await?;
+            Ok(result.rows_affected())
+        }
     }
 
     async fn query(&self, sql: &str, params: HashMap<String, DbValue>) -> Result<QueryResult> {

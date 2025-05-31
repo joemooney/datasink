@@ -59,6 +59,66 @@ name = "url"
 type = "TEXT"
 nullable = true
 
+# Archive table for deleted notes
+[[tables]]
+name = "notes_archive"
+description = "Archive of deleted post-it notes"
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+primary_key = true
+# Note: This is the original ID from the notes table, not auto-increment
+
+[[tables.columns]]
+name = "title"
+type = "TEXT"
+nullable = false
+# Note: No unique constraint in archive - same title can be deleted multiple times
+
+[[tables.columns]]
+name = "description"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+
+[[tables.columns]]
+name = "created_by"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "status"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "priority"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "url"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "deleted_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+# When this note was deleted and moved to archive
+
+[[tables.columns]]
+name = "deleted_by"
+type = "TEXT"
+nullable = true
+# Username of the person who deleted this note
+
 # Tags table
 [[tables]]
 name = "tags"
@@ -101,6 +161,27 @@ foreign_key = { table = "tags", column = "id" }
 
 # Composite primary key would be (note_id, tag_id)
 # For now, we'll ensure uniqueness through careful insertion
+
+# Archive table for deleted note-tag relationships
+[[tables]]
+name = "note_tags_archive"
+description = "Archive of deleted note-tag links"
+
+[[tables.columns]]
+name = "note_id"
+type = "INTEGER"
+nullable = false
+
+[[tables.columns]]
+name = "tag_id"
+type = "INTEGER"
+nullable = false
+
+[[tables.columns]]
+name = "deleted_at"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
 
 # Initial tags
 [[data.tags]]
