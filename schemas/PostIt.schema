@@ -21,6 +21,7 @@ auto_increment = true
 name = "title"
 type = "TEXT"
 nullable = false
+unique = true
 
 [[tables.columns]]
 name = "description"
