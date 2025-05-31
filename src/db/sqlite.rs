@@ -147,27 +147,71 @@ impl Database for SqliteDatabase {
             return Err(DatabaseError::QueryError("No values provided".to_string()));
         }
 
-        let columns: Vec<&String> = values.keys().collect();
-        let placeholders: Vec<String> = (0..columns.len()).map(|i| format!("?{}", i + 1)).collect();
+        // Special handling for notes table - track history
+        if table_name == "notes" {
+            // Start a transaction to ensure atomicity
+            let mut tx = self.pool.begin().await?;
+            
+            // Perform the insert
+            let columns: Vec<&String> = values.keys().collect();
+            let placeholders: Vec<String> = (0..columns.len()).map(|i| format!("?{}", i + 1)).collect();
 
-        let sql = format!(
-            "INSERT INTO {} ({}) VALUES ({})",
-            table_name,
-            columns
-                .iter()
-                .map(|c| c.as_str())
-                .collect::<Vec<_>>()
-                .join(", "),
-            placeholders.join(", ")
-        );
+            let sql = format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                table_name,
+                columns
+                    .iter()
+                    .map(|c| c.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                placeholders.join(", ")
+            );
 
-        let mut query = sqlx::query(&sql);
-        for (_, value) in values.iter() {
-            query = Self::bind_value(query, value);
+            let mut query = sqlx::query(&sql);
+            for (_, value) in values.iter() {
+                query = Self::bind_value(query, value);
+            }
+
+            let result = query.execute(&mut *tx).await?;
+            let inserted_id = result.last_insert_rowid();
+            
+            // Now insert into history
+            let history_sql = format!(
+                "INSERT INTO notes_history (id, title, description, created_at, created_by, status, priority, url, last_updated, updated_by, operation)
+                 SELECT id, title, description, created_at, created_by, status, priority, url, strftime('%s', 'now'), NULL, 'INSERT'
+                 FROM notes WHERE id = {}", 
+                inserted_id
+            );
+            sqlx::query(&history_sql).execute(&mut *tx).await?;
+            
+            // Commit the transaction
+            tx.commit().await?;
+            
+            Ok(inserted_id)
+        } else {
+            // Regular insert for other tables
+            let columns: Vec<&String> = values.keys().collect();
+            let placeholders: Vec<String> = (0..columns.len()).map(|i| format!("?{}", i + 1)).collect();
+
+            let sql = format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                table_name,
+                columns
+                    .iter()
+                    .map(|c| c.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                placeholders.join(", ")
+            );
+
+            let mut query = sqlx::query(&sql);
+            for (_, value) in values.iter() {
+                query = Self::bind_value(query, value);
+            }
+
+            let result = query.execute(&self.pool).await?;
+            Ok(result.last_insert_rowid())
         }
-
-        let result = query.execute(&self.pool).await?;
-        Ok(result.last_insert_rowid())
     }
 
     async fn update(
@@ -180,26 +224,68 @@ impl Database for SqliteDatabase {
             return Err(DatabaseError::QueryError("No values provided".to_string()));
         }
 
-        let set_clauses: Vec<String> = values
-            .keys()
-            .enumerate()
-            .map(|(i, col)| format!("{} = ?{}", col, i + 1))
-            .collect();
+        // Special handling for notes table - track history
+        if table_name == "notes" {
+            // Start a transaction to ensure atomicity
+            let mut tx = self.pool.begin().await?;
+            
+            // First, capture the current state of notes that will be updated
+            let history_sql = format!(
+                "INSERT INTO notes_history (id, title, description, created_at, created_by, status, priority, url, last_updated, updated_by, operation)
+                 SELECT id, title, description, created_at, created_by, status, priority, url, strftime('%s', 'now'), NULL, 'UPDATE'
+                 FROM notes WHERE {}", 
+                where_clause
+            );
+            sqlx::query(&history_sql).execute(&mut *tx).await?;
+            
+            // Now perform the update
+            let set_clauses: Vec<String> = values
+                .keys()
+                .enumerate()
+                .map(|(i, col)| format!("{} = ?{}", col, i + 1))
+                .collect();
 
-        let sql = format!(
-            "UPDATE {} SET {} WHERE {}",
-            table_name,
-            set_clauses.join(", "),
-            where_clause
-        );
+            let sql = format!(
+                "UPDATE {} SET {} WHERE {}",
+                table_name,
+                set_clauses.join(", "),
+                where_clause
+            );
 
-        let mut query = sqlx::query(&sql);
-        for (_, value) in values.iter() {
-            query = Self::bind_value(query, value);
+            let mut query = sqlx::query(&sql);
+            for (_, value) in values.iter() {
+                query = Self::bind_value(query, value);
+            }
+
+            let result = query.execute(&mut *tx).await?;
+            
+            // Commit the transaction
+            tx.commit().await?;
+            
+            Ok(result.rows_affected())
+        } else {
+            // Regular update for other tables
+            let set_clauses: Vec<String> = values
+                .keys()
+                .enumerate()
+                .map(|(i, col)| format!("{} = ?{}", col, i + 1))
+                .collect();
+
+            let sql = format!(
+                "UPDATE {} SET {} WHERE {}",
+                table_name,
+                set_clauses.join(", "),
+                where_clause
+            );
+
+            let mut query = sqlx::query(&sql);
+            for (_, value) in values.iter() {
+                query = Self::bind_value(query, value);
+            }
+
+            let result = query.execute(&self.pool).await?;
+            Ok(result.rows_affected())
         }
-
-        let result = query.execute(&self.pool).await?;
-        Ok(result.rows_affected())
     }
 
     async fn delete(&self, table_name: &str, where_clause: &str) -> Result<u64> {

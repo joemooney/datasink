@@ -162,6 +162,76 @@ foreign_key = { table = "tags", column = "id" }
 # Composite primary key would be (note_id, tag_id)
 # For now, we'll ensure uniqueness through careful insertion
 
+# History table for tracking all note changes
+[[tables]]
+name = "notes_history"
+description = "History of all note changes (inserts and updates)"
+
+# Note: This has a composite primary key of (id, last_updated)
+# Since we can't define composite primary keys in the schema yet,
+# we'll handle this with a unique index
+
+[[tables.columns]]
+name = "id"
+type = "INTEGER"
+nullable = false
+# Not marked as primary_key since we need composite key
+
+[[tables.columns]]
+name = "title"
+type = "TEXT"
+nullable = false
+# Note: No unique constraint in history - same title can appear multiple times
+
+[[tables.columns]]
+name = "description"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "created_at"
+type = "TIMESTAMP"
+nullable = false
+
+[[tables.columns]]
+name = "created_by"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "status"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "priority"
+type = "TEXT"
+nullable = false
+
+[[tables.columns]]
+name = "url"
+type = "TEXT"
+nullable = true
+
+[[tables.columns]]
+name = "last_updated"
+type = "TIMESTAMP"
+nullable = false
+default = "CURRENT_TIMESTAMP"
+# When this version of the note was saved
+
+[[tables.columns]]
+name = "updated_by"
+type = "TEXT"
+nullable = true
+# Username of the person who made this change
+
+[[tables.columns]]
+name = "operation"
+type = "TEXT"
+nullable = false
+# 'INSERT' or 'UPDATE' to track what kind of change this was
+
 # Archive table for deleted note-tag relationships
 [[tables]]
 name = "note_tags_archive"
@@ -312,3 +382,24 @@ columns = ["note_id"]
 table = "note_tags"
 name = "idx_note_tags_tag"
 columns = ["tag_id"]
+
+[[indexes]]
+table = "notes_history"
+name = "idx_notes_history_id"
+columns = ["id"]
+
+[[indexes]]
+table = "notes_history"
+name = "idx_notes_history_updated"
+columns = ["last_updated"]
+
+[[indexes]]
+table = "notes_history"
+name = "idx_notes_history_composite"
+columns = ["id", "last_updated"]
+unique = true
+
+[[indexes]]
+table = "notes_archive"
+name = "idx_notes_archive_deleted"
+columns = ["deleted_at"]
