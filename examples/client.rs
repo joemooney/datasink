@@ -34,6 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Creating users table...");
     let create_table_req = CreateTableRequest {
         table_name: "users".to_string(),
+        database: String::new(),  // Use default database
         columns: vec![
             ColumnDefinition {
                 name: "id".to_string(),
@@ -104,6 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let insert_req = InsertRequest {
         table_name: "users".to_string(),
         values,
+        database: String::new(),  // Use default database
     };
 
     let response = client.insert(insert_req).await?;
@@ -113,6 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nBatch inserting users...");
     let batch_req = BatchInsertRequest {
         table_name: "users".to_string(),
+        database: String::new(),  // Use default database
         rows: vec![
             InsertRow {
                 values: {
@@ -198,6 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         table_name: "users".to_string(),
         values: update_values,
         where_clause: "id = 1".to_string(),
+        database: String::new(),  // Use default database
     };
 
     let response = client.update(update_req).await?;
@@ -208,6 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let query_req = QueryRequest {
         sql: "SELECT * FROM users ORDER BY id".to_string(),
         parameters: HashMap::new(),
+        database: String::new(),  // Use default database
     };
 
     let mut stream = client.query(query_req).await?.into_inner();
@@ -266,6 +271,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let delete_req = DeleteRequest {
         table_name: "users".to_string(),
         where_clause: "id = 3".to_string(),
+        database: String::new(),  // Use default database
     };
 
     let response = client.delete(delete_req).await?;

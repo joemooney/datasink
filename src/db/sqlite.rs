@@ -254,8 +254,31 @@ impl Database for SqliteDatabase {
         sql: &str,
         params: HashMap<String, DbValue>,
     ) -> Result<(Vec<(String, ColumnType)>, StreamedQueryResult)> {
-        // For now, execute the query and convert to a stream
-        // This is a simplified implementation that loads all results into memory
+        // Check if this is a non-SELECT query (INSERT, UPDATE, DELETE)
+        let trimmed_sql = sql.trim().to_uppercase();
+        if trimmed_sql.starts_with("INSERT") || trimmed_sql.starts_with("UPDATE") || trimmed_sql.starts_with("DELETE") {
+            // Execute the non-SELECT query
+            let mut query = sqlx::query(sql);
+            for (_, value) in params.iter() {
+                query = Self::bind_value(query, value);
+            }
+            let result = query.execute(&self.pool).await?;
+            let affected_rows = result.rows_affected();
+            
+            // Return a synthetic result set with the affected rows count
+            let columns = vec![("affected_rows".to_string(), ColumnType::Integer)];
+            let rows = vec![vec![DbValue::Integer(affected_rows as i64)]];
+            
+            let stream = Box::pin(stream::iter(
+                rows.into_iter()
+                    .map(Ok)
+                    .collect::<Vec<Result<Vec<DbValue>>>>(),
+            ));
+            
+            return Ok((columns, stream));
+        }
+        
+        // For SELECT queries, execute normally
         let result = self.query(sql, params).await?;
 
         let columns = result.columns;
